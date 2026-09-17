@@ -28,3 +28,7 @@ coverage/
 **/macos/Pods/
 **/xcuserdata/
 **/DerivedData/
+
+# Keep: a developer's global gitignore may hide these (data/, *.manifest).
+!lib/**/data/
+!windows/runner/runner.exe.manifest
