@@ -7,7 +7,7 @@ Generic repository scaffolded from `transikey` with `--type other`. Use this typ
 If the repo grows into a recognised stack, re-bootstrap with the correct `--type` and migrate the content.
 
 ## Current Status
-- **Last Updated**: TBD
+- **Last Updated**: 2026-09-17
 - **Current Phase**: Development
 - **Health**: Green
 
@@ -20,14 +20,20 @@ None.
 
 ## Recent Progress
 - Initial scaffold from `transikey`
+- 2026-09-17: Flutter desktop client scaffold (auth, database, SSH, sharing, leases, settings), dev stack, Makefile, tests
 
 ## Blockers & Issues
 None currently.
 
 ## Architecture & Key Decisions
-- **Stack**: Not specified — see project README for what this repo contains
+- **Stack**: Flutter 3.32+ / Dart 3.8 desktop app (macOS, Windows, Linux). Riverpod 3 (Notifier/AsyncNotifier), go_router, Dio, Freezed. Layout: `lib/app`, `lib/core`, `lib/features/<name>/{domain,data,presentation}`
+- **Generated code** (`*.g.dart`, `*.freezed.dart`) is git-ignored: run `make gen` after clone and after model or `.feature` changes
+- **Secrets in models**: every model holding secret material overrides `toString()` with a redacted form; logging goes through `AppLogger` + `Redaction` only
+- **Token location**: `TokenHolder` (memory) and OS keystore; never in provider state or models that reach the UI
+- **Retries**: only requests that never reached the server (connect errors); credential endpoints are not idempotent
+- **Tests**: `make check` (offline: unit + BDD via `bdd_widget_test`), `make dev-up && make test-integration` (live OpenBao + PostgreSQL)
+- **macOS**: App Sandbox off and login keychain, so unsigned builds can use secure storage; revisit for signed releases
 - **Pre-commit**: standard hygiene hooks (trailing whitespace, EOF, YAML/JSON validation), `yamllint` (relaxed), `gitleaks` (secret scanning)
-- **No language-specific tooling** — add it if and when the repo gains code in a specific language
 
 ## Required Claude Code plugins
 
