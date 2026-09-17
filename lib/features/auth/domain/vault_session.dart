@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'vault_session.freezed.dart';
 part 'vault_session.g.dart';
 
-enum AuthMethod { token, userpass, approle }
+enum AuthMethod { token, userpass, ldap, oidc, approle }
 
 /// Non-secret description of the active login. The token itself lives in
 /// `TokenHolder` (memory) and the OS keystore, never in this object.

@@ -113,6 +113,33 @@ void main() {
       );
     });
 
+    test('ldap login yields a token with the transikey policy', () async {
+      final auth = await client.loginWithLdap(
+        env['DEV_LDAP_USER'] ?? 'ldapdemo',
+        env['DEV_LDAP_USER_PASSWORD'] ?? 'transikey-dev',
+      );
+      expect(auth.clientToken, isNotEmpty);
+      expect(auth.policies, contains('transikey'));
+    });
+
+    test('a wrong ldap password is an AuthenticationException', () async {
+      await expectLater(
+        client.loginWithLdap('ldapdemo', 'wrong-password'),
+        throwsA(isA<AuthenticationException>()),
+      );
+    });
+
+    test('oidc on a server without an OIDC mount fails cleanly', () async {
+      await expectLater(
+        client.oidcAuthUrl(
+          role: '',
+          redirectUri: Uri.parse('http://localhost:8250/oidc/callback'),
+          clientNonce: 'nonce',
+        ),
+        throwsA(isA<VaultException>()),
+      );
+    });
+
     test('approle login works with a fresh secret id', () async {
       // Role id and secret id are read with the root token through plain Dio.
       holder.set(rootToken);

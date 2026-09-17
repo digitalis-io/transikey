@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/dio_factory.dart';
 import '../../core/api/dio_vault_api_client.dart';
@@ -16,6 +17,12 @@ final loggerProvider = Provider<AppLogger>((ref) => AppLogger());
 
 final secretStoreProvider = Provider<SecretStore>(
   (ref) => FlutterSecureSecretStore(),
+);
+
+/// Opens a URL in the system browser (OIDC login).
+final browserLauncherProvider = Provider<Future<bool> Function(Uri)>(
+  (ref) =>
+      (url) => launchUrl(url, mode: LaunchMode.externalApplication),
 );
 
 final biometricAuthProvider = Provider<BiometricAuth>(
@@ -39,7 +46,9 @@ final clipboardGuardProvider = Provider<ClipboardGuard>((ref) {
   return guard;
 });
 
-/// Builds a client for arbitrary settings. Used by the connection test.
+/// Builds a client for arbitrary settings: the connection test and share
+/// links that point at another server. Such a client gets its own empty
+/// [TokenHolder], so the session token can never reach a foreign address.
 final apiClientFactoryProvider = Provider<VaultApiClient Function(AppSettings)>(
   (ref) {
     return (settings) {
@@ -47,7 +56,7 @@ final apiClientFactoryProvider = Provider<VaultApiClient Function(AppSettings)>(
       return DioVaultApiClient(
         dio: buildVaultDio(
           config: config,
-          tokenHolder: ref.read(tokenHolderProvider),
+          tokenHolder: TokenHolder(),
           logger: ref.read(loggerProvider),
         ),
         config: config,

@@ -40,6 +40,8 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
     'SSH mount': TextEditingController(text: _draft.sshMount),
     'Userpass mount': TextEditingController(text: _draft.userpassMount),
     'AppRole mount': TextEditingController(text: _draft.approleMount),
+    'LDAP mount': TextEditingController(text: _draft.ldapMount),
+    'OIDC mount': TextEditingController(text: _draft.oidcMount),
   };
   AsyncValue<HealthStatus?> _test = const AsyncData(null);
 
@@ -60,6 +62,8 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
     sshMount: _mounts['SSH mount']!.text,
     userpassMount: _mounts['Userpass mount']!.text,
     approleMount: _mounts['AppRole mount']!.text,
+    ldapMount: _mounts['LDAP mount']!.text,
+    oidcMount: _mounts['OIDC mount']!.text,
   );
 
   Future<void> _save() async {

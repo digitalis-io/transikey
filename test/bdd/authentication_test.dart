@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import './step/the_app_is_connected_to_a_test_server.dart';
 import './step/i_sign_in_with_userpass_as_and_password.dart';
 import './step/i_see_the_message.dart';
+import './step/i_sign_in_with_ldap_as_and_password.dart';
 import './step/i_do_not_see_the_message.dart';
 import './step/i_submit_the_sign_in_form_without_credentials.dart';
 import './step/i_sign_out.dart';
@@ -22,6 +23,18 @@ void main() {
       await iSignInWithUserpassAsAndPassword(tester, 'demo', 'good-password');
       await iSeeTheMessage(tester, 'Signed in');
       await iSeeTheMessage(tester, 'demo');
+    });
+    testWidgets('''Sign in with an LDAP account''', (tester) async {
+      await bddSetUp(tester);
+      await iSignInWithLdapAsAndPassword(tester, 'demo', 'good-password');
+      await iSeeTheMessage(tester, 'Signed in');
+      await iSeeTheMessage(tester, 'ldap');
+    });
+    testWidgets('''A wrong LDAP password is rejected''', (tester) async {
+      await bddSetUp(tester);
+      await iSignInWithLdapAsAndPassword(tester, 'demo', 'bad-password');
+      await iSeeTheMessage(tester, 'Login failed. Check your credentials.');
+      await iDoNotSeeTheMessage(tester, 'Signed in');
     });
     testWidgets('''A wrong password is rejected''', (tester) async {
       await bddSetUp(tester);

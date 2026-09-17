@@ -51,6 +51,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
   final _password = TextEditingController();
   final _roleId = TextEditingController();
   final _secretId = TextEditingController();
+  final _oidcRole = TextEditingController();
   AuthMethod _method = AuthMethod.token;
   bool _prefilled = false;
 
@@ -63,6 +64,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
       _username,
       _password,
       _roleId,
+      _oidcRole,
       _secretId,
     ]) {
       c.dispose();
@@ -85,6 +87,10 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
         await auth.loginWithToken(_token.text);
       case AuthMethod.userpass:
         await auth.loginWithUserpass(_username.text, _password.text);
+      case AuthMethod.ldap:
+        await auth.loginWithLdap(_username.text, _password.text);
+      case AuthMethod.oidc:
+        await auth.loginWithOidc(_oidcRole.text);
       case AuthMethod.approle:
         await auth.loginWithAppRole(_roleId.text, _secretId.text);
     }
@@ -153,6 +159,8 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
                 value: AuthMethod.userpass,
                 label: Text('Userpass'),
               ),
+              ButtonSegment(value: AuthMethod.ldap, label: Text('LDAP')),
+              ButtonSegment(value: AuthMethod.oidc, label: Text('OIDC')),
               ButtonSegment(value: AuthMethod.approle, label: Text('AppRole')),
             ],
             selected: {_method},
@@ -160,13 +168,31 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
           ),
           ...switch (_method) {
             AuthMethod.token => [secret(_token, 'Token')],
-            AuthMethod.userpass => [
+            AuthMethod.userpass || AuthMethod.ldap => [
               TextFormField(
                 controller: _username,
                 decoration: const InputDecoration(labelText: 'Username'),
                 validator: _required,
               ),
               secret(_password, 'Password'),
+            ],
+            AuthMethod.oidc => [
+              TextFormField(
+                controller: _oidcRole,
+                decoration: const InputDecoration(
+                  labelText: 'Role (optional)',
+                  hintText: 'Empty = the default role of the OIDC mount',
+                ),
+                onFieldSubmitted: (_) => _submit(),
+              ),
+              Text(
+                login.isLoading
+                    ? 'Finish signing in in your browser…'
+                    : 'Your browser opens for the identity provider login. '
+                          'The role must allow the redirect URI '
+                          'http://localhost:8250/oidc/callback.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ],
             AuthMethod.approle => [
               TextFormField(
@@ -189,7 +215,9 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.login),
-              label: const Text('Sign in'),
+              label: Text(
+                _method == AuthMethod.oidc ? 'Sign in with browser' : 'Sign in',
+              ),
             ),
           ),
         ],

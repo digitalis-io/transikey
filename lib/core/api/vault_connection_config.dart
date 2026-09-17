@@ -7,15 +7,19 @@ class VaultMounts extends Equatable {
     this.ssh = 'ssh',
     this.userpass = 'userpass',
     this.approle = 'approle',
+    this.ldap = 'ldap',
+    this.oidc = 'oidc',
   });
 
   final String database;
   final String ssh;
   final String userpass;
   final String approle;
+  final String ldap;
+  final String oidc;
 
   @override
-  List<Object?> get props => [database, ssh, userpass, approle];
+  List<Object?> get props => [database, ssh, userpass, approle, ldap, oidc];
 }
 
 /// Everything the HTTP client needs to reach a server. Equivalent to

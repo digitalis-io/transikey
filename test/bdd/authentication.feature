@@ -9,6 +9,16 @@ Feature: Authentication
     Then I see the message {'Signed in'}
     And I see the message {'demo'}
 
+  Scenario: Sign in with an LDAP account
+    When I sign in with LDAP as {'demo'} and password {'good-password'}
+    Then I see the message {'Signed in'}
+    And I see the message {'ldap'}
+
+  Scenario: A wrong LDAP password is rejected
+    When I sign in with LDAP as {'demo'} and password {'bad-password'}
+    Then I see the message {'Login failed. Check your credentials.'}
+    And I do not see the message {'Signed in'}
+
   Scenario: A wrong password is rejected
     When I sign in with userpass as {'demo'} and password {'bad-password'}
     Then I see the message {'Login failed. Check your credentials.'}

@@ -76,8 +76,8 @@ build-windows: ## Release build for Windows (needs a Windows host)
 # --- dev stack: OpenBao + PostgreSQL ------------------------------------------
 
 .PHONY: dev-up
-dev-up: ## Start OpenBao (dev mode) and PostgreSQL, then configure them
-	$(COMPOSE) up -d --wait openbao postgres
+dev-up: ## Start OpenBao (dev mode), PostgreSQL and OpenLDAP, then configure them
+	$(COMPOSE) up -d --wait openbao postgres openldap
 	$(COMPOSE) up init
 
 .PHONY: dev-down

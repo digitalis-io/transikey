@@ -1,19 +1,20 @@
 #!/bin/sh
 # Configures the OpenBao dev server for Transikey testing:
-#   - userpass user and AppRole role bound to the "transikey" policy
+#   - userpass user, AppRole role and LDAP auth bound to the "transikey" policy
 #   - database secrets engine connected to the compose PostgreSQL
 #   - SSH secrets engine with an OTP role and a CA signing role
 #
 # Idempotent: safe to run again against the same server.
 # Required environment: BAO_ADDR, BAO_TOKEN, DEV_POSTGRES_PASSWORD,
-# DEV_USER, DEV_USER_PASSWORD.
+# DEV_USER, DEV_USER_PASSWORD, DEV_LDAP_ADMIN_PASSWORD.
 
 set -eu
 
 log() { printf '[init] %s\n' "$*"; }
 die() { printf '[init] ERROR: %s\n' "$*" >&2; exit 1; }
 
-for var in BAO_ADDR BAO_TOKEN DEV_POSTGRES_PASSWORD DEV_USER DEV_USER_PASSWORD; do
+for var in BAO_ADDR BAO_TOKEN DEV_POSTGRES_PASSWORD DEV_USER DEV_USER_PASSWORD \
+  DEV_LDAP_ADMIN_PASSWORD; do
   eval "[ -n \"\${$var:-}\" ]" || die "$var is not set"
 done
 command -v bao >/dev/null 2>&1 || die "bao CLI not found"
@@ -72,6 +73,18 @@ bao write auth/approle/role/transikey \
   token_max_ttl=4h >/dev/null
 log "approle role transikey ready"
 
+enable auth ldap
+bao write auth/ldap/config \
+  url=ldap://openldap \
+  binddn="cn=admin,dc=transikey,dc=test" \
+  bindpass="$DEV_LDAP_ADMIN_PASSWORD" \
+  userdn="ou=people,dc=transikey,dc=test" \
+  userattr=uid \
+  token_policies=transikey \
+  token_ttl=30m \
+  token_max_ttl=4h >/dev/null
+log "ldap auth ready"
+
 enable secrets database
 bao write database/config/postgres \
   plugin_name=postgresql-database-plugin \
@@ -116,5 +129,6 @@ cat <<SUMMARY
   address   http://127.0.0.1:8200 (or your DEV_BAO_PORT)
   token     the DEV_BAO_ROOT_TOKEN value (default: root)
   userpass  user "$DEV_USER", password from DEV_USER_PASSWORD
+  ldap      user from DEV_LDAP_USER (default: ldapdemo), password from DEV_LDAP_USER_PASSWORD
   approle   make dev-approle
 SUMMARY

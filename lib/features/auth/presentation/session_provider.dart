@@ -14,6 +14,7 @@ final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => VaultAuthRepository(
     ref.watch(apiClientProvider),
     ref.watch(secretStoreProvider),
+    ref.watch(browserLauncherProvider),
   ),
 );
 

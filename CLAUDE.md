@@ -20,6 +20,7 @@ None.
 
 ## Recent Progress
 - Initial scaffold from `transikey`
+- 2026-09-17: LDAP and OIDC login; OpenLDAP in dev stack
 - 2026-09-17: Share links (`transikey://unwrap`), app icon from logo, CI + tag release workflow
 - 2026-09-17: Flutter desktop client scaffold (auth, database, SSH, sharing, leases, settings), dev stack, Makefile, tests
 

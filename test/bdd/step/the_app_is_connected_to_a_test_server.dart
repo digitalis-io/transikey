@@ -25,7 +25,7 @@ Future<void> theAppIsConnectedToATestServer(WidgetTester tester) async {
   addTearDown(tester.view.reset);
 
   final server = _FakeServer();
-  when(() => server.loginWithUserpass(any(), any())).thenAnswer((call) async {
+  Future<AuthResponse> login(Invocation call) async {
     final username = call.positionalArguments[0] as String;
     final password = call.positionalArguments[1] as String;
     if (username != _validUser || password != _validPassword) {
@@ -41,7 +41,10 @@ Future<void> theAppIsConnectedToATestServer(WidgetTester tester) async {
       renewable: false,
       displayName: username,
     );
-  });
+  }
+
+  when(() => server.loginWithUserpass(any(), any())).thenAnswer(login);
+  when(() => server.loginWithLdap(any(), any())).thenAnswer(login);
   when(() => server.revokeSelf()).thenAnswer((_) async {});
 
   final store = InMemorySecretStore();

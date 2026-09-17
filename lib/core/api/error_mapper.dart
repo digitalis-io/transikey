@@ -53,7 +53,9 @@ abstract final class ErrorMapper {
     final errors = _serverErrors(response.data);
     final joined = errors.join(' ').toLowerCase();
     final isAuthPath =
-        path.contains('/login') || path.endsWith('auth/token/lookup-self');
+        path.contains('/login') ||
+        path.contains('/oidc/') ||
+        path.endsWith('auth/token/lookup-self');
 
     if (joined.contains('lease not found') ||
         joined.contains('lease is not renewable') ||

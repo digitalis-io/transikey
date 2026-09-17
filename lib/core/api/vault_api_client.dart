@@ -20,6 +20,23 @@ abstract class VaultApiClient {
 
   Future<AuthResponse> loginWithAppRole(String roleId, String secretId);
 
+  Future<AuthResponse> loginWithLdap(String username, String password);
+
+  /// First leg of the OIDC flow: the identity provider URL to open in a
+  /// browser. [role] may be empty to use the mount's default role.
+  Future<Uri> oidcAuthUrl({
+    required String role,
+    required Uri redirectUri,
+    required String clientNonce,
+  });
+
+  /// Last leg of the OIDC flow: trades the provider's `code` for a token.
+  Future<AuthResponse> oidcCallback({
+    required String state,
+    required String code,
+    required String clientNonce,
+  });
+
   Future<AuthResponse> renewSelf({Duration? increment});
 
   Future<void> revokeSelf();

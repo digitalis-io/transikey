@@ -93,6 +93,70 @@ class DioVaultApiClient implements VaultApiClient {
       });
 
   @override
+  Future<AuthResponse> loginWithLdap(
+    String username,
+    String password,
+  ) => _guard(() async {
+    if (username.trim().isEmpty || password.isEmpty) {
+      throw const ValidationException('Username and password are required.');
+    }
+    final envelope = await _request(
+      'POST',
+      '/v1/auth/${_mounts.ldap}/login/${Uri.encodeComponent(username.trim())}',
+      data: {'password': password},
+      options: _noAuth,
+    );
+    return _authFrom(envelope);
+  });
+
+  @override
+  Future<Uri> oidcAuthUrl({
+    required String role,
+    required Uri redirectUri,
+    required String clientNonce,
+  }) => _guard(() async {
+    final envelope = await _request(
+      'POST',
+      '/v1/auth/${_mounts.oidc}/oidc/auth_url',
+      data: {
+        if (role.trim().isNotEmpty) 'role': role.trim(),
+        'redirect_uri': redirectUri.toString(),
+        'client_nonce': clientNonce,
+      },
+      options: _noAuth,
+    );
+    final url = envelope.data?['auth_url'] as String? ?? '';
+    final parsed = Uri.tryParse(url);
+    // The server answers with an empty URL for an unknown role or a
+    // redirect URI the role does not allow.
+    if (url.isEmpty || parsed == null || !parsed.hasScheme) {
+      throw const AuthenticationException(
+        'OIDC login is not available for this role. Check the role name '
+        'and that it allows http://localhost:8250/oidc/callback.',
+      );
+    }
+    return parsed;
+  });
+
+  @override
+  Future<AuthResponse> oidcCallback({
+    required String state,
+    required String code,
+    required String clientNonce,
+  }) => _guard(() async {
+    final response = await _dio.get<dynamic>(
+      '/v1/auth/${_mounts.oidc}/oidc/callback',
+      queryParameters: {
+        'state': state,
+        'code': code,
+        'client_nonce': clientNonce,
+      },
+      options: _noAuth,
+    );
+    return _authFrom(VaultEnvelope.fromJson(_asMap(response.data)));
+  });
+
+  @override
   Future<AuthResponse> renewSelf({Duration? increment}) => _guard(() async {
     final envelope = await _request(
       'POST',

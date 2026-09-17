@@ -1,4 +1,4 @@
-# Local test stack for Transikey: OpenBao (dev mode) + PostgreSQL.
+# Local test stack for Transikey: OpenBao (dev mode), PostgreSQL, OpenLDAP.
 # Development only. Dev mode keeps everything in memory and uses a fixed root
 # token. Never expose this stack beyond localhost.
 #
@@ -23,6 +23,33 @@ services:
       timeout: 3s
       retries: 30
 
+  openldap:
+    image: osixia/openldap:1.5.0
+    environment:
+      LDAP_ORGANISATION: Transikey Dev
+      LDAP_DOMAIN: transikey.test
+      LDAP_ADMIN_PASSWORD: ${DEV_LDAP_ADMIN_PASSWORD:-transikey-dev}
+    healthcheck:
+      test: ["CMD-SHELL", "ldapsearch -x -H ldap://localhost -b \"\" -s base namingContexts >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  # Creates the LDAP test user. Runs in the OpenLDAP image for its ldap tools.
+  ldap-init:
+    image: osixia/openldap:1.5.0
+    depends_on:
+      openldap:
+        condition: service_healthy
+    environment:
+      LDAP_ADMIN_PASSWORD: ${DEV_LDAP_ADMIN_PASSWORD:-transikey-dev}
+      DEV_LDAP_USER: ${DEV_LDAP_USER:-ldapdemo}
+      DEV_LDAP_USER_PASSWORD: ${DEV_LDAP_USER_PASSWORD:-transikey-dev}
+    volumes:
+      - ./ldap-init.sh:/ldap-init.sh:ro
+    entrypoint: ["/bin/bash", "/ldap-init.sh"]
+    restart: "no"
+
   openbao:
     image: ${DEV_BAO_IMAGE:-openbao/openbao:latest}
     command: server -dev -dev-listen-address=0.0.0.0:8200
@@ -46,7 +73,10 @@ services:
         condition: service_healthy
       openbao:
         condition: service_healthy
+      ldap-init:
+        condition: service_completed_successfully
     environment:
+      DEV_LDAP_ADMIN_PASSWORD: ${DEV_LDAP_ADMIN_PASSWORD:-transikey-dev}
       BAO_ADDR: http://openbao:8200
       BAO_TOKEN: ${DEV_BAO_ROOT_TOKEN:-root}
       DEV_POSTGRES_PASSWORD: ${DEV_POSTGRES_PASSWORD:-transikey-dev}

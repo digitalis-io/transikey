@@ -28,6 +28,8 @@ abstract class AppSettings with _$AppSettings {
     @Default('ssh') String sshMount,
     @Default('userpass') String userpassMount,
     @Default('approle') String approleMount,
+    @Default('ldap') String ldapMount,
+    @Default('oidc') String oidcMount,
   }) = _AppSettings;
 
   factory AppSettings.fromJson(Map<String, dynamic> json) =>
@@ -48,6 +50,8 @@ abstract class AppSettings with _$AppSettings {
       ssh: _mount(sshMount, 'ssh'),
       userpass: _mount(userpassMount, 'userpass'),
       approle: _mount(approleMount, 'approle'),
+      ldap: _mount(ldapMount, 'ldap'),
+      oidc: _mount(oidcMount, 'oidc'),
     ),
   );
 

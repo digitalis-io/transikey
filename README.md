@@ -21,7 +21,7 @@ You need [Flutter](https://docs.flutter.dev/get-started/install) 3.32 or newer a
 ```bash
 git clone git@github.com:digitalis-io/transikey.git && cd transikey
 make gen        # fetch packages, generate Freezed / JSON code
-make dev-up     # OpenBao (dev mode) + PostgreSQL, fully configured
+make dev-up     # OpenBao (dev mode) + PostgreSQL + OpenLDAP, fully configured
 make run        # start the app
 ```
 
@@ -31,7 +31,10 @@ Sign in with address `http://127.0.0.1:8200` and one of these dev-only credentia
 |--------|-------------|
 | Token | `root` |
 | Userpass | user `demo`, password `transikey-dev` |
+| LDAP | user `ldapdemo`, password `transikey-dev` |
 | AppRole | output of `make dev-approle` |
+
+OIDC needs a real identity provider, so the dev stack does not cover it. The OIDC role on your server must list `http://localhost:8250/oidc/callback` in `allowed_redirect_uris`, the same requirement as `vault login -method=oidc`. Transikey opens your browser, waits for the provider to redirect back to that loopback address, and signs you in.
 
 Run `make help` for every task.
 
@@ -99,6 +102,8 @@ All settings live in **Settings** (`Cmd/Ctrl+,`) and are stored in the OS keysto
 | SSH mount | path | `ssh` | `ssh-client-signer` |
 | Userpass mount | path | `userpass` | `userpass-ops` |
 | AppRole mount | path | `approle` | `approle-ci` |
+| LDAP mount | path | `ldap` | `ldap-corp` |
+| OIDC mount | path | `oidc` | `okta` |
 
 Dev stack environment variables. Set them in the shell before `make dev-up`:
 
@@ -110,6 +115,8 @@ Dev stack environment variables. Set them in the shell before `make dev-up`:
 | `DEV_POSTGRES_PORT` | `5432` | `DEV_POSTGRES_PORT=5433` |
 | `DEV_POSTGRES_PASSWORD` | `transikey-dev` | `DEV_POSTGRES_PASSWORD=local-only` |
 | `DEV_USER` / `DEV_USER_PASSWORD` | `demo` / `transikey-dev` | `DEV_USER=alice` |
+| `DEV_LDAP_USER` / `DEV_LDAP_USER_PASSWORD` | `ldapdemo` / `transikey-dev` | `DEV_LDAP_USER=bob` |
+| `DEV_LDAP_ADMIN_PASSWORD` | `transikey-dev` | `DEV_LDAP_ADMIN_PASSWORD=local-only` |
 
 The dev stack is for local testing only: dev mode keeps data in memory, uses a fixed root token and binds to `127.0.0.1`.
 
@@ -127,7 +134,7 @@ The dev stack is for local testing only: dev mode keeps data in memory, uses a f
 - Secrets are masked until you press **Reveal**, and leave provider state when the session locks or ends.
 - The token lives in memory and in the OS keystore only. Lock drops the in-memory copy; unlock needs biometrics, otherwise you sign in again.
 - Logs carry method, path, status and latency. Headers and bodies are never logged, and every message passes a redaction filter (tokens, PEM blocks, SSH certificates).
-- Sign out revokes tokens minted by a userpass or AppRole login. A token you pasted in is left valid: it is yours.
+- Sign out revokes tokens minted by a userpass, LDAP, OIDC or AppRole login. A token you pasted in is left valid: it is yours.
 - The macOS build runs without the App Sandbox so that it can use the login keychain in unsigned builds. Re-enable the sandbox and the data-protection keychain when you ship a signed build.
 
 ## Development

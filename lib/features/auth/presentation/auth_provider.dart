@@ -33,6 +33,17 @@ class VaultAuthNotifier extends AsyncNotifier<void> {
     () => ref.read(authRepositoryProvider).loginWithAppRole(roleId, secretId),
   );
 
+  Future<void> loginWithLdap(String username, String password) => _login(
+    AuthMethod.ldap,
+    () => ref.read(authRepositoryProvider).loginWithLdap(username, password),
+  );
+
+  /// Opens the system browser and waits for the provider to call back.
+  Future<void> loginWithOidc(String role) => _login(
+    AuthMethod.oidc,
+    () => ref.read(authRepositoryProvider).loginWithOidc(role),
+  );
+
   Future<void> _login(
     AuthMethod method,
     Future<AuthResponse> Function() attempt,
