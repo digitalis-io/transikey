@@ -17,4 +17,7 @@ All notable changes to this project will be documented in this file.
 - Makefile for code generation, tests, builds and the dev stack
 - Unit, BDD (Gherkin) and live integration tests
 - Apache-2.0 license
+- One-time share links (`transikey://unwrap?...`) and a CLI one-liner for wrapped secrets; unwrap works without a session and confirms before contacting another server
+- Transikey logo as application icon (macOS, Windows), sidebar and lock screen mark; `tool/make_icons.py` regenerates icons
+- CI job for formatting, analysis and tests; tag-triggered release workflow that packages macOS, Windows and Linux builds with SHA-256 checksums
 - Initial project scaffold bootstrapped from automation/bootstrap

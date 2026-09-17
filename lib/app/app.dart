@@ -6,6 +6,7 @@ import '../core/theme/app_theme.dart';
 import '../features/auth/presentation/session_provider.dart';
 import '../features/settings/domain/app_settings.dart';
 import '../features/settings/presentation/settings_provider.dart';
+import 'providers/deep_link_provider.dart';
 import 'providers/session_cleanup.dart';
 import 'routing/app_router.dart';
 
@@ -15,6 +16,11 @@ class TransikeyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(sessionCleanupProvider);
+    ref.watch(deepLinkListenerProvider);
+    // A share link brings the sharing screen forward, which consumes it.
+    ref.listen(pendingShareLinkProvider, (_, link) {
+      if (link != null) ref.read(routerProvider).go('/sharing');
+    });
     final mode = ref.watch(
       settingsProvider.select((s) => s.value?.themeMode ?? AppThemeMode.system),
     );

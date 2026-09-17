@@ -28,7 +28,8 @@ const appDestinations = [
   AppDestination('/auth', 'Authentication', Icons.key, public: true),
   AppDestination('/database', 'Database Credentials', Icons.storage),
   AppDestination('/ssh', 'SSH Access', Icons.terminal),
-  AppDestination('/sharing', 'Secret Sharing', Icons.ios_share),
+  // Public: a share link recipient can unwrap without a session.
+  AppDestination('/sharing', 'Secret Sharing', Icons.ios_share, public: true),
   AppDestination('/leases', 'Lease Management', Icons.timer_outlined),
   AppDestination('/settings', 'Settings', Icons.settings, public: true),
 ];

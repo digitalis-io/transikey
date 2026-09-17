@@ -104,10 +104,35 @@ class _AppShellState extends ConsumerState<AppShell> with WindowListener {
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.only(left: 12, bottom: 8),
-                child: IconButton(
-                  tooltip: _expanded ? 'Collapse sidebar' : 'Expand sidebar',
-                  icon: Icon(_expanded ? Icons.menu_open : Icons.menu),
-                  onPressed: () => setState(() => _expanded = !_expanded),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/branding/transikey_mark.png',
+                          width: 44,
+                          filterQuality: FilterQuality.medium,
+                        ),
+                        if (_expanded) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            'Transikey',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    IconButton(
+                      tooltip: _expanded
+                          ? 'Collapse sidebar'
+                          : 'Expand sidebar',
+                      icon: Icon(_expanded ? Icons.menu_open : Icons.menu),
+                      onPressed: () => setState(() => _expanded = !_expanded),
+                    ),
+                  ],
                 ),
               ),
             ),

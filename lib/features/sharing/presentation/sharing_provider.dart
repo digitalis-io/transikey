@@ -1,11 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers/core_providers.dart';
+import '../../settings/domain/app_settings.dart';
+import '../../settings/presentation/settings_provider.dart';
 import '../data/vault_sharing_repository.dart';
 import '../domain/sharing_repository.dart';
 
 final sharingRepositoryProvider = Provider<SharingRepository>(
-  (ref) => VaultSharingRepository(ref.watch(apiClientProvider)),
+  (ref) => VaultSharingRepository(
+    ref.watch(apiClientProvider),
+    (address, namespace) => ref.read(apiClientFactoryProvider)(
+      (ref.read(settingsProvider).value ?? const AppSettings()).copyWith(
+        vaultAddr: address,
+        namespace: namespace,
+      ),
+    ),
+  ),
 );
 
 final cubbyholeKeysProvider = FutureProvider<List<String>>(
@@ -29,8 +39,16 @@ class SecretSharingNotifier extends AsyncNotifier<SharingResult?> {
   Future<void> wrap(Map<String, dynamic> payload, Duration ttl) =>
       _run(() async => WrapResult(await _repository.wrap(payload, ttl)));
 
-  Future<void> unwrap(String token) =>
-      _run(() async => UnwrapResult(await _repository.unwrap(token)));
+  Future<void> unwrap(String token, {String? address, String? namespace}) =>
+      _run(
+        () async => UnwrapResult(
+          await _repository.unwrap(
+            token,
+            address: address,
+            namespace: namespace,
+          ),
+        ),
+      );
 
   Future<void> cubbyholeStore(String path, Map<String, dynamic> data) =>
       _run(() async {

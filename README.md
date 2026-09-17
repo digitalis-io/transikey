@@ -4,6 +4,10 @@
   </a>
 </p>
 
+<p align="center">
+  <img src="assets/branding/app_icon.png" alt="Transikey" width="120">
+</p>
+
 # Transikey
 
 Desktop client for [OpenBao](https://openbao.org) and HashiCorp Vault: sign in, request short-lived database and SSH credentials, and share secrets once, without the CLI.
@@ -50,14 +54,22 @@ PGPASSWORD='<password>' psql -h 127.0.0.1 -U '<username>' -d app -c 'select curr
 
 1. Open **Secret Sharing** (`Cmd/Ctrl+4`), tab **Wrap**.
 2. Paste text or a JSON object, choose a time to live, **Wrap secret**.
-3. Send the wrapping token over any channel. It works one time, then it is void.
-4. The colleague opens the **Unwrap** tab, pastes the token and reads the secret. If someone else got there first, unwrapping fails, so interception is detectable.
+3. Press **Copy share link** and send the link over any channel. It works one time, then it is void:
+
+   ```text
+   transikey://unwrap?addr=https%3A%2F%2Fvault.example.com%3A8200&token=hvs.CAES...
+   ```
+
+4. The colleague clicks the link. Transikey opens on the **Unwrap** tab with server and token filled in; nothing is sent until they press **Unwrap**. A link to a server other than their configured one asks for confirmation first. No session is needed to unwrap.
+5. If someone else got there first, unwrapping fails, so interception is detectable.
+
+No Transikey on the other side? **Copy CLI command** gives the recipient a one-liner instead.
 
 The same exchange with the CLI:
 
 ```bash
-bao write -wrap-ttl=30m sys/wrapping/wrap secret='s3cr3t'   # sender
-bao unwrap <wrapping-token>                                  # recipient
+bao write -wrap-ttl=30m sys/wrapping/wrap secret='s3cr3t'          # sender
+BAO_ADDR='https://vault.example.com:8200' bao unwrap '<token>'   # recipient
 ```
 
 ### 3. Sign an SSH key
@@ -137,10 +149,30 @@ lib/
 
 Tests follow BDD: Gherkin files in `test/bdd/*.feature`, step definitions in `test/bdd/step/` ([bdd_widget_test](https://pub.dev/packages/bdd_widget_test)).
 
+### Releases
+
+Push a version tag and GitHub Actions builds and publishes packages for all three platforms:
+
+```bash
+git tag -s v0.1.0 -m "v0.1.0" && git push origin v0.1.0
+```
+
+| Platform | Package |
+|----------|---------|
+| macOS | `transikey-v0.1.0-macos-universal.zip` (the `.app`) |
+| Windows | `transikey-v0.1.0-windows-x64.zip` |
+| Linux | `transikey-v0.1.0-linux-x64.tar.gz` |
+
+`SHA256SUMS.txt` ships with every release. Packages are unsigned for now: macOS Gatekeeper and Windows SmartScreen will warn on first start. A tag with a suffix (`v0.2.0-rc1`) is published as a pre-release.
+
+Regenerate the app icons after a logo change with `python3 tool/make_icons.py` (needs `pillow` and `numpy`).
+
 ### Not implemented yet
 
 - System tray menu, screenshot prevention and multi-window: interfaces exist, platform code is a stub.
 - `ssh/get-attempt-token`: the client calls it as specified, but current OpenBao and Vault releases answer `404 unsupported path`.
+- `transikey://` links are registered on macOS only. Windows needs a registry entry and Linux a `.desktop` file with `x-scheme-handler/transikey`; both belong to a future installer.
+- The Linux window icon is not set yet (macOS and Windows use the Transikey icon).
 - Windows and Linux builds are scaffolded but have only been built on macOS so far.
 
 ## Contact

@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers/clipboard_actions.dart';
+import '../../../app/providers/deep_link_provider.dart';
 import '../../../core/utils/duration_format.dart';
+import '../../../core/utils/share_link.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../../core/widgets/secret_field.dart';
+import '../../settings/presentation/settings_provider.dart';
 import '../domain/sharing_repository.dart';
 import 'sharing_provider.dart';
 
@@ -40,7 +43,11 @@ class SharingScreen extends ConsumerStatefulWidget {
   ConsumerState<SharingScreen> createState() => _SharingScreenState();
 }
 
-class _SharingScreenState extends ConsumerState<SharingScreen> {
+class _SharingScreenState extends ConsumerState<SharingScreen>
+    with SingleTickerProviderStateMixin {
+  late final _tabs = TabController(length: 3, vsync: this);
+  final _unwrapServer = TextEditingController();
+  final _unwrapNamespace = TextEditingController();
   final _payload = TextEditingController();
   final _wrappingToken = TextEditingController();
   final _cubbyPath = TextEditingController();
@@ -48,11 +55,77 @@ class _SharingScreenState extends ConsumerState<SharingScreen> {
   Duration _ttl = _ttlChoices.values.elementAt(1);
 
   @override
+  void initState() {
+    super.initState();
+    // A link that launched the app is already waiting.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeShareLink());
+  }
+
+  @override
   void dispose() {
-    for (final c in [_payload, _wrappingToken, _cubbyPath, _cubbyData]) {
+    _tabs.dispose();
+    for (final c in [
+      _payload,
+      _wrappingToken,
+      _unwrapServer,
+      _unwrapNamespace,
+      _cubbyPath,
+      _cubbyData,
+    ]) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// Prefills the Unwrap tab from a `transikey://unwrap` link. Nothing is
+  /// sent until the user presses Unwrap.
+  void _consumeShareLink() {
+    if (!mounted) return;
+    final link = ref.read(pendingShareLinkProvider.notifier).take();
+    if (link == null) return;
+    ref.read(secretSharingProvider.notifier).clear();
+    _wrappingToken.text = link.token;
+    _unwrapServer.text = link.address;
+    _unwrapNamespace.text = link.namespace;
+    _tabs.animateTo(1);
+  }
+
+  Future<void> _unwrap() async {
+    final server = _unwrapServer.text.trim();
+    final configured = ref.read(settingsProvider).value?.vaultAddr.trim() ?? '';
+    if (server.isNotEmpty && server != configured) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Unwrap from another server?'),
+          content: Text(
+            'This secret lives on a server that is not your configured one:'
+            '\n\n$server\n\nContinue only if you trust the sender and '
+            'recognise this address.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Unwrap'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    await ref
+        .read(secretSharingProvider.notifier)
+        .unwrap(
+          _wrappingToken.text,
+          address: server,
+          namespace: _unwrapNamespace.text,
+        );
+    if (!mounted) return;
+    _wrappingToken.clear();
   }
 
   @override
@@ -60,139 +133,149 @@ class _SharingScreenState extends ConsumerState<SharingScreen> {
     final result = ref.watch(secretSharingProvider);
     final notifier = ref.read(secretSharingProvider.notifier);
     final busy = result.isLoading;
+    ref.listen(pendingShareLinkProvider, (_, link) {
+      if (link != null) _consumeShareLink();
+    });
 
-    return DefaultTabController(
-      length: 3,
-      child: FeaturePage(
-        title: 'Secret Sharing',
-        scrollable: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TabBar(
-              onTap: (_) => notifier.clear(),
-              tabs: const [
-                Tab(text: 'Wrap'),
-                Tab(text: 'Unwrap'),
-                Tab(text: 'Cubbyhole'),
+    return FeaturePage(
+      title: 'Secret Sharing',
+      scrollable: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TabBar(
+            controller: _tabs,
+            onTap: (_) => notifier.clear(),
+            tabs: const [
+              Tab(text: 'Wrap'),
+              Tab(text: 'Unwrap'),
+              Tab(text: 'Cubbyhole'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabs,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _tab([
+                  TextField(
+                    controller: _payload,
+                    minLines: 4,
+                    maxLines: 8,
+                    decoration: const InputDecoration(
+                      labelText: 'Secret (text or JSON object)',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  DropdownButtonFormField<Duration>(
+                    value: _ttl,
+                    decoration: const InputDecoration(
+                      labelText: 'Time to live',
+                    ),
+                    items: [
+                      for (final e in _ttlChoices.entries)
+                        DropdownMenuItem(value: e.value, child: Text(e.key)),
+                    ],
+                    onChanged: (v) => setState(() => _ttl = v ?? _ttl),
+                  ),
+                  _button('Wrap secret', Icons.lock, busy, () async {
+                    await notifier.wrap(
+                      parseSecretPayload(_payload.text),
+                      _ttl,
+                    );
+                    if (!mounted) return;
+                    if (!ref.read(secretSharingProvider).hasError) {
+                      _payload.clear();
+                    }
+                  }),
+                  _ResultView(result),
+                ]),
+                _tab([
+                  TextField(
+                    controller: _wrappingToken,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Wrapping token',
+                    ),
+                  ),
+                  const Text(
+                    'A wrapping token works once. Unwrapping consumes it.',
+                  ),
+                  TextField(
+                    controller: _unwrapServer,
+                    decoration: const InputDecoration(
+                      labelText: 'Server (optional)',
+                      hintText: 'Empty = your configured server',
+                    ),
+                  ),
+                  TextField(
+                    controller: _unwrapNamespace,
+                    decoration: const InputDecoration(
+                      labelText: 'Namespace (optional)',
+                    ),
+                  ),
+                  _button('Unwrap', Icons.lock_open, busy, _unwrap),
+                  _ResultView(result),
+                ]),
+                _tab([
+                  TextField(
+                    controller: _cubbyPath,
+                    decoration: const InputDecoration(
+                      labelText: 'Path',
+                      prefixText: 'cubbyhole/',
+                    ),
+                  ),
+                  TextField(
+                    controller: _cubbyData,
+                    minLines: 3,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'Secret to store (text or JSON object)',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: busy
+                            ? null
+                            : () async {
+                                await notifier.cubbyholeStore(
+                                  _cubbyPath.text,
+                                  parseSecretPayload(_cubbyData.text),
+                                );
+                                if (!mounted) return;
+                                _cubbyData.clear();
+                              },
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('Store'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: busy
+                            ? null
+                            : () => notifier.cubbyholeRetrieve(_cubbyPath.text),
+                        icon: const Icon(Icons.download_outlined),
+                        label: const Text('Retrieve'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: busy
+                            ? null
+                            : () => notifier.cubbyholeDelete(_cubbyPath.text),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                  _CubbyholeKeys(
+                    onSelected: (k) => setState(() => _cubbyPath.text = k),
+                  ),
+                  _ResultView(result),
+                ]),
               ],
             ),
-            Expanded(
-              child: TabBarView(
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _tab([
-                    TextField(
-                      controller: _payload,
-                      minLines: 4,
-                      maxLines: 8,
-                      decoration: const InputDecoration(
-                        labelText: 'Secret (text or JSON object)',
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    DropdownButtonFormField<Duration>(
-                      value: _ttl,
-                      decoration: const InputDecoration(
-                        labelText: 'Time to live',
-                      ),
-                      items: [
-                        for (final e in _ttlChoices.entries)
-                          DropdownMenuItem(value: e.value, child: Text(e.key)),
-                      ],
-                      onChanged: (v) => setState(() => _ttl = v ?? _ttl),
-                    ),
-                    _button('Wrap secret', Icons.lock, busy, () async {
-                      await notifier.wrap(
-                        parseSecretPayload(_payload.text),
-                        _ttl,
-                      );
-                      if (!mounted) return;
-                      if (!ref.read(secretSharingProvider).hasError) {
-                        _payload.clear();
-                      }
-                    }),
-                    _ResultView(result),
-                  ]),
-                  _tab([
-                    TextField(
-                      controller: _wrappingToken,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Wrapping token',
-                      ),
-                    ),
-                    const Text(
-                      'A wrapping token works once. Unwrapping consumes it.',
-                    ),
-                    _button('Unwrap', Icons.lock_open, busy, () async {
-                      await notifier.unwrap(_wrappingToken.text);
-                      if (!mounted) return;
-                      _wrappingToken.clear();
-                    }),
-                    _ResultView(result),
-                  ]),
-                  _tab([
-                    TextField(
-                      controller: _cubbyPath,
-                      decoration: const InputDecoration(
-                        labelText: 'Path',
-                        prefixText: 'cubbyhole/',
-                      ),
-                    ),
-                    TextField(
-                      controller: _cubbyData,
-                      minLines: 3,
-                      maxLines: 6,
-                      decoration: const InputDecoration(
-                        labelText: 'Secret to store (text or JSON object)',
-                        alignLabelWithHint: true,
-                      ),
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        FilledButton.icon(
-                          onPressed: busy
-                              ? null
-                              : () async {
-                                  await notifier.cubbyholeStore(
-                                    _cubbyPath.text,
-                                    parseSecretPayload(_cubbyData.text),
-                                  );
-                                  if (!mounted) return;
-                                  _cubbyData.clear();
-                                },
-                          icon: const Icon(Icons.save_outlined),
-                          label: const Text('Store'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: busy
-                              ? null
-                              : () =>
-                                    notifier.cubbyholeRetrieve(_cubbyPath.text),
-                          icon: const Icon(Icons.download_outlined),
-                          label: const Text('Retrieve'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: busy
-                              ? null
-                              : () => notifier.cubbyholeDelete(_cubbyPath.text),
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('Delete'),
-                        ),
-                      ],
-                    ),
-                    _CubbyholeKeys(
-                      onSelected: (k) => setState(() => _cubbyPath.text = k),
-                    ),
-                    _ResultView(result),
-                  ]),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -225,6 +308,39 @@ class _SharingScreenState extends ConsumerState<SharingScreen> {
       label: Text(label),
     ),
   );
+}
+
+/// Copy a one-time share link or the equivalent CLI command.
+class _ShareActions extends ConsumerWidget {
+  const _ShareActions({required this.token});
+
+  final String token;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider).value;
+    final link = ShareLink(
+      address: settings?.vaultAddr.trim() ?? '',
+      namespace: settings?.namespace.trim() ?? '',
+      token: token,
+    );
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        FilledButton.tonalIcon(
+          onPressed: () => copySecret(context, ref, link.toUri().toString()),
+          icon: const Icon(Icons.link),
+          label: const Text('Copy share link'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => copySecret(context, ref, link.toCliCommand()),
+          icon: const Icon(Icons.terminal),
+          label: const Text('Copy CLI command'),
+        ),
+      ],
+    );
+  }
 }
 
 class _CubbyholeKeys extends ConsumerWidget {
@@ -284,6 +400,8 @@ class _ResultView extends ConsumerWidget {
                 plain('Accessor', secret.accessor),
                 plain('TTL', formatDuration(secret.ttl)),
                 plain('Expires', '${secret.expiresAt.toLocal()}'),
+                const SizedBox(height: 8),
+                _ShareActions(token: secret.token),
               ],
               UnwrapResult(:final secret) => [
                 ...secretData(secret.data),

@@ -2,7 +2,14 @@ import '../../../core/models/wrapped_secret.dart';
 
 abstract class SharingRepository {
   Future<WrappedSecret> wrap(Map<String, dynamic> payload, Duration ttl);
-  Future<UnwrappedSecret> unwrap(String wrappingToken);
+
+  /// Unwraps on the configured server, or on [address] / [namespace] when a
+  /// share link points at a different one.
+  Future<UnwrappedSecret> unwrap(
+    String wrappingToken, {
+    String? address,
+    String? namespace,
+  });
 
   Future<void> cubbyholeStore(String path, Map<String, dynamic> data);
   Future<Map<String, dynamic>> cubbyholeRetrieve(String path);

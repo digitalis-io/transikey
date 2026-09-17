@@ -54,7 +54,9 @@ class _LockScreenState extends ConsumerState<LockScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.lock, size: 56, color: theme.colorScheme.primary),
+                Image.asset('assets/branding/transikey_mark.png', width: 120),
+                const SizedBox(height: 8),
+                Icon(Icons.lock, size: 32, color: theme.colorScheme.primary),
                 const SizedBox(height: 16),
                 Text('Session locked', style: theme.textTheme.headlineSmall),
                 const SizedBox(height: 8),
