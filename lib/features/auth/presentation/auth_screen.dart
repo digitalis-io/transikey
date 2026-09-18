@@ -5,9 +5,13 @@ import '../../../core/errors/vault_exception.dart';
 import '../../../core/utils/duration_format.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../leases/presentation/leases_provider.dart';
+import '../../settings/domain/app_settings.dart';
+import '../../settings/domain/server_profile.dart';
+import '../../settings/presentation/profile_dialogs.dart';
 import '../../settings/presentation/settings_provider.dart';
 import '../domain/vault_session.dart';
 import 'auth_provider.dart';
+import 'profile_switcher.dart';
 import 'session_provider.dart';
 
 class AuthScreen extends ConsumerWidget {
@@ -55,6 +59,18 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
   AuthMethod _method = AuthMethod.token;
   bool _prefilled = false;
 
+  /// Fills the form from the live settings: on first build and whenever
+  /// another server profile becomes active.
+  void _prefill(AppSettings settings) {
+    _address.text = settings.vaultAddr;
+    _namespace.text = settings.namespace;
+    _username.text = settings.lastUsername;
+    _method = AuthMethod.values.firstWhere(
+      (m) => m.name == settings.lastAuthMethod,
+      orElse: () => _method,
+    );
+  }
+
   @override
   void dispose() {
     for (final c in [
@@ -75,10 +91,22 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     final settings = ref.read(settingsProvider.notifier);
+    final address = _address.text.trim();
+    // A different address is a different server: never overwrite the
+    // active profile with it.
+    final active = ref.read(settingsProvider).value?.activeProfile;
+    if (active != null && active.vaultAddr.trim() != address) {
+      await settings.detachProfile();
+    }
     await settings.change(
       (s) => s.copyWith(
-        vaultAddr: _address.text.trim(),
+        vaultAddr: address,
         namespace: _namespace.text.trim(),
+        lastAuthMethod: _method.name,
+        lastUsername: switch (_method) {
+          AuthMethod.userpass || AuthMethod.ldap => _username.text.trim(),
+          _ => '',
+        },
       ),
     );
     final auth = ref.read(vaultAuthProvider.notifier);
@@ -111,9 +139,16 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
     final settings = ref.watch(settingsProvider).value;
     if (!_prefilled && settings != null) {
       _prefilled = true;
-      _address.text = settings.vaultAddr;
-      _namespace.text = settings.namespace;
+      _prefill(settings);
     }
+    ref.listen(settingsProvider.select((s) => s.value?.activeProfileId), (
+      previous,
+      next,
+    ) {
+      final latest = ref.read(settingsProvider).value;
+      if (next != null && latest != null) setState(() => _prefill(latest));
+    });
+    final profiles = settings?.profiles ?? const <ServerProfile>[];
 
     Widget secret(TextEditingController c, String label) => TextFormField(
       controller: c,
@@ -131,6 +166,57 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 14,
         children: [
+          if (profiles.isNotEmpty)
+            DropdownButtonFormField<String?>(
+              value: settings?.activeProfileId,
+              // Bounded item width, so the address can ellipsize.
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Server'),
+              items: [
+                const DropdownMenuItem<String?>(child: Text('New server…')),
+                for (final p in profiles)
+                  DropdownMenuItem<String?>(
+                    value: p.id,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          size: 12,
+                          color: p.color == 0
+                              ? Theme.of(context).colorScheme.outline
+                              : Color(p.color),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(p.name),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            p.vaultAddr,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              onChanged: login.isLoading
+                  ? null
+                  : (id) async {
+                      final notifier = ref.read(settingsProvider.notifier);
+                      if (id == null) {
+                        await notifier.detachProfile();
+                        setState(() {
+                          _address.clear();
+                          _namespace.clear();
+                          _username.clear();
+                        });
+                        return;
+                      }
+                      final target = profiles.firstWhere((p) => p.id == id);
+                      await switchServerProfile(context, ref, target);
+                    },
+            ),
           if (widget.reason != null)
             ErrorBanner(error: VaultException(widget.reason!)),
           TextFormField(
@@ -236,6 +322,7 @@ class _SessionCard extends ConsumerWidget {
     final now = ref.watch(clockProvider).value ?? DateTime.now();
     final left = session.remaining(now);
     final notifier = ref.read(vaultSessionProvider.notifier);
+    final settings = ref.watch(settingsProvider).value;
     final theme = Theme.of(context);
 
     Widget row(String label, String value) => Padding(
@@ -260,6 +347,10 @@ class _SessionCard extends ConsumerWidget {
           children: [
             Text('Signed in', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
+            row(
+              'Server',
+              settings?.activeProfile?.name ?? settings?.vaultAddr ?? '',
+            ),
             row('Identity', session.displayName),
             row('Method', session.method.name),
             row('Policies', session.policies.join(', ')),
@@ -289,6 +380,12 @@ class _SessionCard extends ConsumerWidget {
                     },
                     icon: const Icon(Icons.autorenew),
                     label: const Text('Renew token'),
+                  ),
+                if (settings != null && settings.activeProfile == null)
+                  OutlinedButton.icon(
+                    onPressed: () => showProfileDialog(context, ref),
+                    icon: const Icon(Icons.bookmark_add_outlined),
+                    label: const Text('Save server profile'),
                   ),
                 OutlinedButton.icon(
                   onPressed: notifier.lock,

@@ -24,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - SSH server in the dev stack that accepts OpenBao signed certificates and one-time passwords (`vault-ssh-helper`)
 - Connect section on the Database screen: copy-ready `psql` or `mysql` command and connection URI, with remembered host, port and database
 - Connect section on the SSH screen: copy-ready `ssh`, `sshpass` and `CertificateFile` commands, with remembered user, host, port and key path
+- Server profiles: remember several servers with their namespace, TLS settings, mounts, Connect targets, last sign-in method and username; dropdown on the sign-in form, colour tag in the status bar, management under Settings; switching signs out first
 - CI job for formatting, analysis and tests; tag-triggered release workflow that packages macOS, Windows and Linux builds with SHA-256 checksums
 - Initial project scaffold bootstrapped from automation/bootstrap
 

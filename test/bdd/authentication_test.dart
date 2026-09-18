@@ -11,6 +11,9 @@ import './step/i_sign_in_with_ldap_as_and_password.dart';
 import './step/i_do_not_see_the_message.dart';
 import './step/i_submit_the_sign_in_form_without_credentials.dart';
 import './step/i_sign_out.dart';
+import './step/the_servers_and_are_remembered.dart';
+import './step/i_pick_the_server.dart';
+import './step/the_sign_in_form_targets_as.dart';
 
 void main() {
   group('''Authentication''', () {
@@ -54,6 +57,25 @@ void main() {
       await iSignOut(tester);
       await iSeeTheMessage(tester, 'Sign in');
       await iDoNotSeeTheMessage(tester, 'Signed in');
+    });
+    testWidgets('''Picking a remembered server fills in the sign in form''', (
+      tester,
+    ) async {
+      await bddSetUp(tester);
+      await theServersAndAreRemembered(tester, 'prod', 'dev');
+      await iPickTheServer(tester, 'prod');
+      await theSignInFormTargetsAs(
+        tester,
+        'https://bao.prod.example:8200',
+        'sergio',
+      );
+    });
+    testWidgets('''A new server starts from an empty form''', (tester) async {
+      await bddSetUp(tester);
+      await theServersAndAreRemembered(tester, 'prod', 'dev');
+      await iPickTheServer(tester, 'prod');
+      await iPickTheServer(tester, 'New server…');
+      await theSignInFormTargetsAs(tester, '', '');
     });
   });
 }

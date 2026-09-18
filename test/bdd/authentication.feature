@@ -34,3 +34,14 @@ Feature: Authentication
     When I sign out
     Then I see the message {'Sign in'}
     And I do not see the message {'Signed in'}
+
+  Scenario: Picking a remembered server fills in the sign in form
+    Given the servers {'prod'} and {'dev'} are remembered
+    When I pick the server {'prod'}
+    Then the sign in form targets {'https://bao.prod.example:8200'} as {'sergio'}
+
+  Scenario: A new server starts from an empty form
+    Given the servers {'prod'} and {'dev'} are remembered
+    And I pick the server {'prod'}
+    When I pick the server {'New server…'}
+    Then the sign in form targets {''} as {''}

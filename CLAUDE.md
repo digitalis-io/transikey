@@ -17,10 +17,12 @@ Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from th
 
 ## Active Tasks
 - PR #1 (`feat/flutter-scaffold` → `main`) open; keep its description in sync with new commits.
-- First release tag not cut yet: `release.yml` is unproven until then.
+- Profile ideas not built: import from `VAULT_ADDR` / `BAO_ADDR` env, JSON export/import, profile hint in share links, concurrent sessions (deferred on purpose).
 - Commit `f7c433e` lacks `Signed-off-by` and a Conventional Commit subject; amend before merge if DCO is enforced.
 
 ## Recent Progress
+- 2026-09-18: Server profiles (`ServerProfile`, dropdown, colour tag, Settings list); sharing screen gated on session
+- 2026-09-18: `v0.1.0-rc1` tagged; release workflow proven on all three platforms
 - 2026-09-18: SSH target in dev stack, role-switch clearing, DB and SSH Connect sections, button label fix, docs review applied
 - 2026-09-17: PR #1 opened; CI fixed (global gitignore hid `data/` dirs and `runner.exe.manifest`; fake PEM tripped detect-private-key)
 - 2026-09-17: Keyboard resync on window focus (stuck key after dialog/browser steals focus); sign-out no longer revokes a user-supplied token
@@ -45,6 +47,7 @@ Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from th
 - **Retries**: only requests that never reached the server (connect errors); credential endpoints are not idempotent
 - **Tests**: `make check` (offline: unit + BDD via `bdd_widget_test`), `make dev-up && make test-integration` (live OpenBao + PostgreSQL)
 - **macOS**: App Sandbox off and login keychain, so unsigned builds can use secure storage; revisit for signed releases
+- **Server profiles**: `AppSettings` server-scoped fields always describe the active server; `SettingsNotifier.save` writes them back into the active `ServerProfile` (`syncActiveProfile`). Globals (theme, timeouts, biometrics) are not part of a profile. Switching goes through `switchServerProfile` (confirm, logout, apply); a changed address on the sign-in form detaches rather than overwrites. Profiles hold no secrets
 - **Logout**: revokes only tokens the app minted (userpass, LDAP, OIDC, AppRole); a pasted token is never revoked
 - **Ad-hoc clients** (connection test, share link to another server) get their own empty `TokenHolder`; redirects are never followed
 - **Share links**: `transikey://unwrap?addr=&ns=&token=`; prefill only, confirmation for a foreign server; `/sharing` route is public

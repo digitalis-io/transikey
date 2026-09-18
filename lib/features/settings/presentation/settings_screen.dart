@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/health_status.dart';
 import '../../../core/widgets/async_value_view.dart';
+import '../../auth/presentation/profile_switcher.dart';
 import '../domain/app_settings.dart';
+import 'profile_dialogs.dart';
 import 'settings_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -17,13 +19,17 @@ class SettingsScreen extends ConsumerWidget {
     title: 'Settings',
     child: AsyncValueView<AppSettings>(
       value: ref.watch(settingsProvider),
-      data: (settings) => _SettingsForm(initial: settings),
+      // A new key rebuilds the form when another profile becomes active.
+      data: (settings) => _SettingsForm(
+        key: ValueKey(settings.activeProfileId),
+        initial: settings,
+      ),
     ),
   );
 }
 
 class _SettingsForm extends ConsumerStatefulWidget {
-  const _SettingsForm({required this.initial});
+  const _SettingsForm({super.key, required this.initial});
 
   final AppSettings initial;
 
@@ -68,7 +74,16 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
 
   Future<void> _save() async {
     final messenger = ScaffoldMessenger.of(context);
-    await ref.read(settingsProvider.notifier).save(_current);
+    // Profiles are edited outside this draft: keep the latest list.
+    final latest = ref.read(settingsProvider).value ?? _draft;
+    await ref
+        .read(settingsProvider.notifier)
+        .save(
+          _current.copyWith(
+            profiles: latest.profiles,
+            activeProfileId: latest.activeProfileId,
+          ),
+        );
     messenger.showSnackBar(const SnackBar(content: Text('Settings saved')));
   }
 
@@ -152,69 +167,75 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 16,
           children: [
-            section('Connection', [
-              TextField(
-                controller: _address,
-                decoration: const InputDecoration(
-                  labelText: 'Vault / OpenBao URL (VAULT_ADDR)',
-                  hintText: 'https://vault.example.com:8200',
-                ),
-              ),
-              TextField(
-                controller: _namespace,
-                decoration: const InputDecoration(
-                  labelText: 'Namespace (VAULT_NAMESPACE)',
-                ),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Skip TLS verification'),
-                subtitle: const Text(
-                  'Insecure. Use only against test servers.',
-                ),
-                value: !_draft.tlsVerify,
-                onChanged: _setSkipTls,
-              ),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _importCa,
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text('Import CA certificate'),
+            section('Server profiles', [const _ProfilesList()]),
+            section(
+              ref.watch(settingsProvider).value?.activeProfile == null
+                  ? 'Connection'
+                  : 'Connection · ${ref.watch(settingsProvider).value!.activeProfile!.name}',
+              [
+                TextField(
+                  controller: _address,
+                  decoration: const InputDecoration(
+                    labelText: 'Vault / OpenBao URL (VAULT_ADDR)',
+                    hintText: 'https://vault.example.com:8200',
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _draft.caCertPem == null
-                          ? 'System trust store only'
-                          : 'Custom CA: ${_draft.caCertName ?? 'imported'}',
+                ),
+                TextField(
+                  controller: _namespace,
+                  decoration: const InputDecoration(
+                    labelText: 'Namespace (VAULT_NAMESPACE)',
+                  ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Skip TLS verification'),
+                  subtitle: const Text(
+                    'Insecure. Use only against test servers.',
+                  ),
+                  value: !_draft.tlsVerify,
+                  onChanged: _setSkipTls,
+                ),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _importCa,
+                      icon: const Icon(Icons.upload_file),
+                      label: const Text('Import CA certificate'),
                     ),
-                  ),
-                  if (_draft.caCertPem != null)
-                    IconButton(
-                      tooltip: 'Remove custom CA',
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => setState(
-                        () => _draft = _draft.copyWith(
-                          caCertPem: null,
-                          caCertName: null,
-                        ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _draft.caCertPem == null
+                            ? 'System trust store only'
+                            : 'Custom CA: ${_draft.caCertName ?? 'imported'}',
                       ),
                     ),
-                ],
-              ),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _test.isLoading ? null : _testConnection,
-                    icon: const Icon(Icons.wifi_tethering),
-                    label: const Text('Test connection'),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(child: _TestResult(_test)),
-                ],
-              ),
-            ]),
+                    if (_draft.caCertPem != null)
+                      IconButton(
+                        tooltip: 'Remove custom CA',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => setState(
+                          () => _draft = _draft.copyWith(
+                            caCertPem: null,
+                            caCertName: null,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _test.isLoading ? null : _testConnection,
+                      icon: const Icon(Icons.wifi_tethering),
+                      label: const Text('Test connection'),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: _TestResult(_test)),
+                  ],
+                ),
+              ],
+            ),
             section('Security', [
               _NumberSetting(
                 label: 'Lock after inactivity (seconds, 0 = never)',
@@ -335,4 +356,72 @@ class _NumberSetting extends StatelessWidget {
       if (parsed != null && parsed >= 0) onChanged(parsed);
     },
   );
+}
+
+class _ProfilesList extends ConsumerWidget {
+  const _ProfilesList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+    final notifier = ref.read(settingsProvider.notifier);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (settings.profiles.isEmpty)
+          const Text(
+            'No profiles yet. Save the current server to switch back to it '
+            'later with its namespace, TLS, mounts and connect targets.',
+          ),
+        for (final p in settings.profiles)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: ProfileDot(p.color, size: 16),
+            title: Text(
+              p.id == settings.activeProfileId ? '${p.name} (active)' : p.name,
+            ),
+            subtitle: Text(
+              p.namespace.isEmpty
+                  ? p.vaultAddr
+                  : '${p.vaultAddr} · ${p.namespace}',
+            ),
+            trailing: Wrap(
+              spacing: 4,
+              children: [
+                if (p.id != settings.activeProfileId)
+                  TextButton(
+                    onPressed: () => switchServerProfile(context, ref, p),
+                    child: const Text('Switch'),
+                  ),
+                IconButton(
+                  tooltip: 'Rename or recolour',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => showProfileDialog(context, ref, existing: p),
+                ),
+                IconButton(
+                  tooltip: 'Delete profile',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => notifier.deleteProfile(p.id),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: settings.isConfigured
+                ? () => showProfileDialog(context, ref)
+                : null,
+            icon: const Icon(Icons.bookmark_add_outlined),
+            label: Text(
+              settings.activeProfile == null
+                  ? 'Save current server as profile'
+                  : 'Save a copy as new profile',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

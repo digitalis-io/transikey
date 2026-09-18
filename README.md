@@ -171,6 +171,24 @@ Dev stack environment variables. Set them in the shell before `make dev-up`:
 
 The dev stack is for local testing only: dev mode keeps data in memory, uses a fixed root token and binds to `127.0.0.1`.
 
+### Server profiles
+
+Work with several servers? Save each one as a profile and pick it from the **Server** dropdown on the sign-in form.
+
+| A profile remembers | A profile never stores |
+|---------------------|------------------------|
+| Name and colour tag, address, namespace, TLS verification, custom CA | Tokens |
+| The six mount paths | Passwords, secret IDs |
+| Database and SSH **Connect** targets | Issued credentials or leases |
+| Last sign-in method and username | |
+
+1. Sign in to a server, then **Save server profile** (session card or **Settings → Server profiles**). Name it, for example `prod`, and give it a colour tag such as red.
+2. Next time pick `prod` from the dropdown: address, namespace, method and username are filled in.
+3. Switching while signed in asks first, signs you out of the current server and clears the screen, so nothing issued by one server shows while another is active.
+4. The status bar shows the active profile and a coloured edge, so prod never looks like dev.
+
+Edits made while a profile is active (mounts, Connect targets, TLS) are saved to that profile. Typing a different address on the sign-in form detaches from the profile instead of overwriting it. Theme, lock timeout, clipboard timeout and biometric unlock are global.
+
 ## Keyboard shortcuts
 
 | Shortcut (`Cmd` on macOS, `Ctrl` elsewhere) | Action |

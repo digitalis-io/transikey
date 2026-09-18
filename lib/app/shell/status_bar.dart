@@ -24,12 +24,31 @@ class StatusBar extends ConsumerWidget {
     final tlsVerify = ref.watch(
       settingsProvider.select((s) => s.value?.tlsVerify ?? true),
     );
+    final profile = ref.watch(
+      settingsProvider.select((s) => s.value?.activeProfile),
+    );
     final plainHttp = address.trim().toLowerCase().startsWith('http://');
 
-    return Padding(
+    // A coloured edge for tagged profiles: prod must not look like dev.
+    final tag = profile == null || profile.color == 0
+        ? Colors.transparent
+        : Color(profile.color);
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: tag, width: 3)),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
+          if (profile != null) ...[
+            _Chip(
+              profile.color == 0 ? StatusColors.unknown : Color(profile.color),
+              profile.name,
+              tooltip: 'Active server profile',
+              bold: true,
+            ),
+            const SizedBox(width: 16),
+          ],
           ..._connection(health, address),
           if (plainHttp) ...[
             const SizedBox(width: 12),
@@ -123,11 +142,12 @@ class _SessionIndicator extends ConsumerWidget {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip(this.color, this.label, {this.tooltip});
+  const _Chip(this.color, this.label, {this.tooltip, this.bold = false});
 
   final Color color;
   final String label;
   final String? tooltip;
+  final bool bold;
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +160,10 @@ class _Chip extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(label),
+        Text(
+          label,
+          style: bold ? const TextStyle(fontWeight: FontWeight.w600) : null,
+        ),
       ],
     );
     return tooltip == null || tooltip!.isEmpty
