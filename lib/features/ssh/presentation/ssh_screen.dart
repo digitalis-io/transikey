@@ -6,11 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers/clipboard_actions.dart';
 import '../../../core/utils/duration_format.dart';
+import '../../../core/utils/ssh_connect_command.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../../core/widgets/resizable_split.dart';
 import '../../../core/widgets/role_picker.dart';
 import '../../../core/widgets/secret_field.dart';
 import '../../leases/presentation/lease_countdown.dart';
+import '../../settings/domain/app_settings.dart';
+import '../../settings/presentation/settings_provider.dart';
 import '../domain/ssh_repository.dart';
 import 'ssh_provider.dart';
 
@@ -27,6 +30,7 @@ class _SshScreenState extends ConsumerState<SshScreen> {
   final _publicKey = TextEditingController();
   final _principals = TextEditingController();
   String? _role;
+  String? _certPath;
 
   @override
   void dispose() {
@@ -51,6 +55,10 @@ class _SshScreenState extends ConsumerState<SshScreen> {
       return;
     }
     _publicKey.text = content.trim();
+    // Remember the matching private key for the connect command.
+    await ref
+        .read(settingsProvider.notifier)
+        .change((s) => s.copyWith(sshKeyPath: privateKeyPathFor(path)));
   }
 
   @override
@@ -118,7 +126,12 @@ class _SshScreenState extends ConsumerState<SshScreen> {
                                   username: _username.text,
                                 ),
                         ),
-                        _ResultView(result),
+                        _ResultView(
+                          result,
+                          certPath: _certPath,
+                          onCertificateSaved: (p) =>
+                              setState(() => _certPath = p),
+                        ),
                       ]),
                       _tab([
                         TextField(
@@ -155,7 +168,12 @@ class _SshScreenState extends ConsumerState<SshScreen> {
                                   validPrincipals: _principals.text,
                                 ),
                         ),
-                        _ResultView(result),
+                        _ResultView(
+                          result,
+                          certPath: _certPath,
+                          onCertificateSaved: (p) =>
+                              setState(() => _certPath = p),
+                        ),
                       ]),
                       _tab([
                         const Text(
@@ -172,7 +190,12 @@ class _SshScreenState extends ConsumerState<SshScreen> {
                                   'role': _role,
                                 }),
                         ),
-                        _ResultView(result),
+                        _ResultView(
+                          result,
+                          certPath: _certPath,
+                          onCertificateSaved: (p) =>
+                              setState(() => _certPath = p),
+                        ),
                       ]),
                     ],
                   ),
@@ -194,29 +217,50 @@ class _SshScreenState extends ConsumerState<SshScreen> {
     ),
   );
 
-  Widget _action(String label, IconData icon, VoidCallback? onPressed) => Align(
-    alignment: Alignment.centerLeft,
-    child: FilledButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon),
-      label: Text(_role == null ? 'Select a role' : label),
-    ),
+  Widget _action(String label, IconData icon, VoidCallback? onPressed) => Row(
+    children: [
+      FilledButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(_role == null ? label : '$label ($_role)'),
+      ),
+      if (_role == null) ...[
+        const SizedBox(width: 12),
+        Text(
+          'Pick a role in the list on the left first.',
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+      ],
+    ],
   );
 }
 
 class _ResultView extends ConsumerWidget {
-  const _ResultView(this.result);
+  const _ResultView(
+    this.result, {
+    required this.certPath,
+    required this.onCertificateSaved,
+  });
 
   final AsyncValue<SshResult?> result;
+  final String? certPath;
+  final ValueChanged<String> onCertificateSaved;
 
-  Future<void> _download(BuildContext context, String certificate) async {
+  Future<void> _download(
+    BuildContext context,
+    WidgetRef ref,
+    String certificate,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
+    final keyPath = ref.read(settingsProvider).value?.sshKeyPath ?? 'id_key';
+    final keyName = keyPath.split(RegExp(r'[\\/]')).last;
     final path = await FilePicker.saveFile(
       dialogTitle: 'Save signed certificate',
-      fileName: 'id_key-cert.pub',
+      fileName: '$keyName-cert.pub',
     );
     if (path == null) return;
     await File(path).writeAsString('$certificate\n');
+    onCertificateSaved(path);
     messenger.showSnackBar(SnackBar(content: Text('Saved to $path')));
   }
 
@@ -245,6 +289,11 @@ class _ResultView extends ConsumerWidget {
                 ),
                 if (credentials.lease.leaseId.isNotEmpty)
                   LeaseCountdown(leaseId: credentials.lease.leaseId),
+                const Divider(height: 24),
+                _SshConnectSection(
+                  otp: credentials.otp,
+                  suggestedUser: credentials.username,
+                ),
               ],
               SshSignedResult(:final certificate) => [
                 plain('Serial number', certificate.serialNumber),
@@ -256,10 +305,13 @@ class _ResultView extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: () => _download(context, certificate.signedKey),
+                  onPressed: () =>
+                      _download(context, ref, certificate.signedKey),
                   icon: const Icon(Icons.download),
                   label: const Text('Download certificate'),
                 ),
+                const Divider(height: 24),
+                _SshConnectSection(certPath: certPath),
               ],
               SshAttemptTokenResult(:final token, :final issuedAt) => [
                 SecretField(label: 'Token', value: token.token, onCopy: copy),
@@ -276,6 +328,152 @@ class _ResultView extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Ready-to-paste ssh commands. User, host, port and key path are the
+/// user's own settings: Vault only knows the IP an OTP was issued for.
+class _SshConnectSection extends ConsumerStatefulWidget {
+  const _SshConnectSection({this.otp, this.certPath, this.suggestedUser});
+
+  /// Set for an OTP result.
+  final String? otp;
+
+  /// Set for a signed certificate result (path of the saved certificate).
+  final String? certPath;
+
+  /// Username the role assigned, used when the setting is empty.
+  final String? suggestedUser;
+
+  @override
+  ConsumerState<_SshConnectSection> createState() => _SshConnectSectionState();
+}
+
+class _SshConnectSectionState extends ConsumerState<_SshConnectSection> {
+  late final TextEditingController _user;
+  late final TextEditingController _host;
+  late final TextEditingController _port;
+  late final TextEditingController _key;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = ref.read(settingsProvider).value ?? const AppSettings();
+    _user = TextEditingController(
+      text: s.sshUser.isEmpty ? widget.suggestedUser ?? '' : s.sshUser,
+    );
+    _host = TextEditingController(text: s.sshHost);
+    _port = TextEditingController(text: '${s.sshPort}');
+    _key = TextEditingController(text: s.sshKeyPath);
+  }
+
+  @override
+  void didUpdateWidget(_SshConnectSection old) {
+    super.didUpdateWidget(old);
+    final keyPath = ref.read(settingsProvider).value?.sshKeyPath;
+    if (keyPath != null && keyPath != _key.text) _key.text = keyPath;
+  }
+
+  @override
+  void dispose() {
+    for (final c in [_user, _host, _port, _key]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save(AppSettings Function(AppSettings) change) =>
+      ref.read(settingsProvider.notifier).change(change);
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ref.watch(settingsProvider).value ?? const AppSettings();
+    final target = SshTarget(
+      user: _user.text,
+      host: s.sshHost,
+      port: s.sshPort,
+    );
+    void copy(String v) => copySecret(context, ref, v);
+    Widget field(
+      TextEditingController c,
+      String label,
+      void Function(String) onChanged, {
+      double width = 160,
+    }) => SizedBox(
+      width: width,
+      child: TextField(
+        controller: c,
+        decoration: InputDecoration(labelText: label),
+        onChanged: onChanged,
+      ),
+    );
+
+    final isOtp = widget.otp != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Connect', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            field(
+              _user,
+              'User',
+              (v) => _save((x) => x.copyWith(sshUser: v)),
+              width: 120,
+            ),
+            field(_host, 'Host', (v) => _save((x) => x.copyWith(sshHost: v))),
+            field(_port, 'Port', (v) {
+              final port = int.tryParse(v.trim());
+              if (port != null) _save((x) => x.copyWith(sshPort: port));
+            }, width: 90),
+            if (!isOtp)
+              field(
+                _key,
+                'Private key',
+                (v) => _save((x) => x.copyWith(sshKeyPath: v)),
+                width: 260,
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (isOtp) ...[
+          SecretField(
+            label: 'ssh (paste OTP)',
+            value: sshOtpCommand(target),
+            sensitive: false,
+            multiline: true,
+            onCopy: copy,
+          ),
+          SecretField(
+            label: 'sshpass one-liner',
+            value: sshOtpSshpassCommand(target, widget.otp!),
+            multiline: true,
+            onCopy: copy,
+          ),
+        ] else ...[
+          SecretField(
+            label: 'ssh',
+            value: sshCertCommand(
+              target,
+              s.sshKeyPath,
+              certPath: widget.certPath,
+            ),
+            sensitive: false,
+            multiline: true,
+            onCopy: copy,
+          ),
+          if (widget.certPath == null)
+            Text(
+              'Download the certificate next to the key as '
+              '<key>-cert.pub and ssh picks it up automatically.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+        ],
+      ],
     );
   }
 }

@@ -30,6 +30,14 @@ abstract class AppSettings with _$AppSettings {
     @Default('approle') String approleMount,
     @Default('ldap') String ldapMount,
     @Default('oidc') String oidcMount,
+    @Default('psql') String databaseClient,
+    @Default('127.0.0.1') String databaseHost,
+    @Default(5432) int databasePort,
+    @Default('app') String databaseName,
+    @Default('ubuntu') String sshUser,
+    @Default('127.0.0.1') String sshHost,
+    @Default(2222) int sshPort,
+    @Default('~/.ssh/id_ed25519') String sshKeyPath,
   }) = _AppSettings;
 
   factory AppSettings.fromJson(Map<String, dynamic> json) =>

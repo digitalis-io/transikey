@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'shell_quote.dart';
+
 /// `transikey://unwrap?addr=<server>&ns=<namespace>&token=<wrapping token>`
 ///
 /// A one-time link for handing a response-wrapped secret to a colleague.
@@ -31,9 +33,9 @@ class ShareLink extends Equatable {
 
   /// Shell command for recipients without the app. Works with `vault` too.
   String toCliCommand() => [
-    'BAO_ADDR=${_quote(address)}',
-    if (namespace.isNotEmpty) 'BAO_NAMESPACE=${_quote(namespace)}',
-    'bao unwrap ${_quote(token)}',
+    'BAO_ADDR=${shellQuote(address)}',
+    if (namespace.isNotEmpty) 'BAO_NAMESPACE=${shellQuote(namespace)}',
+    'bao unwrap ${shellQuote(token)}',
   ].join(' ');
 
   /// Returns null for anything that is not a well-formed unwrap link.
@@ -54,8 +56,6 @@ class ShareLink extends Equatable {
       token: token,
     );
   }
-
-  static String _quote(String value) => "'${value.replaceAll("'", r"'\''")}'";
 
   @override
   List<Object?> get props => [address, namespace, token];
