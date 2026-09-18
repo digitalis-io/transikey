@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/utils/app_logger.dart';
+import '../../core/utils/key_event_recovery.dart';
 import '../../core/utils/redaction.dart';
 import '../app.dart';
 import '../providers/core_providers.dart';
@@ -17,6 +18,7 @@ Future<void> bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
   final logger = AppLogger();
   _installCrashHandlers(logger);
+  installKeyEventRecovery();
 
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(

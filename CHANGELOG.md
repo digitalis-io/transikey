@@ -36,7 +36,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - Credentials of the previous role stayed on screen after picking another role (Database and SSH)
-- A key released while a dialog or the browser had focus stayed "pressed" and blocked typing; keyboard state resyncs on window focus
+- Debug builds: one out-of-sync key event (a key Flutter still believed pressed) blocked all typing until restart; the stale event is now dropped and the next key press recovers. The window-focus keyboard resync is gone: it could only add pressed keys, never clear them
 - Results of a request could appear under another tab after switching tabs
 - Locking the session no longer loses the current screen
 - Secret Sharing offered Wrap and Cubbyhole while signed out and failed with "permission denied"; those actions are now disabled with a sign-in hint, and the screen opens on Unwrap, which needs no session

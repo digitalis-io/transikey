@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -49,13 +48,7 @@ class _AppShellState extends ConsumerState<AppShell> with WindowListener {
   void onWindowBlur() => setState(() => _windowFocused = false);
 
   @override
-  void onWindowFocus() {
-    // A key released while another window had focus (file dialog, browser,
-    // Touch ID prompt) never reports its key-up here. Flutter then believes
-    // the key is still down and rejects its next key-down. Resync on return.
-    unawaited(HardwareKeyboard.instance.syncKeyboardState());
-    setState(() => _windowFocused = true);
-  }
+  void onWindowFocus() => setState(() => _windowFocused = true);
 
   int get _selectedIndex {
     final index = appDestinations.indexWhere(
