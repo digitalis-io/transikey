@@ -8,3 +8,27 @@
 node_modules/
 .env
 .env.local
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+*.iml
+coverage/
+
+# Generated code (run: dart run build_runner build)
+*.g.dart
+*.freezed.dart
+
+# macOS
+**/macos/Flutter/ephemeral/
+**/macos/Pods/
+**/xcuserdata/
+**/DerivedData/
+
+# Keep: a developer's global gitignore may hide these (data/, *.manifest).
+!lib/**/data/
+!windows/runner/runner.exe.manifest

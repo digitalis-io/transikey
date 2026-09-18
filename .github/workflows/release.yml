@@ -1,0 +1,141 @@
+name: Release
+
+# Builds desktop packages for macOS, Windows and Linux when a version tag is
+# pushed, then publishes them on a GitHub release.
+#
+#   git tag -s v0.1.0 -m "v0.1.0" && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.32.8"
+
+jobs:
+  verify:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter analyze
+      - run: flutter test --exclude-tags integration
+
+  package:
+    name: Package (${{ matrix.platform }})
+    needs: verify
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            runner: macos-14
+          - platform: windows
+            runner: windows-2022
+          - platform: linux
+            runner: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from tag
+        id: version
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          name="${tag#v}"
+          # CFBundleShortVersionString must be numeric: 1.2.3-rc1 -> 1.2.3
+          echo "name=${name%%-*}" >> "$GITHUB_OUTPUT"
+
+      - name: Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
+            libsecret-1-dev libjsoncpp-dev libayatana-appindicator3-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build
+        shell: bash
+        run: |
+          flutter build ${{ matrix.platform }} --release \
+            --build-name "${{ steps.version.outputs.name }}" \
+            --build-number "${{ github.run_number }}"
+
+      - name: Package macOS (.zip)
+        if: matrix.platform == 'macos'
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/macos/Build/Products/Release/transikey.app \
+            "dist/transikey-${{ steps.version.outputs.tag }}-macos-universal.zip"
+          # Fail loudly if the build ever stops being universal.
+          lipo -archs build/macos/Build/Products/Release/transikey.app/Contents/MacOS/transikey | grep -q x86_64
+
+      - name: Package Windows (.zip)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "dist/transikey-${{ steps.version.outputs.tag }}-windows-x64.zip"
+
+      - name: Package Linux (.tar.gz)
+        if: matrix.platform == 'linux'
+        run: |
+          mkdir -p dist
+          tar -C build/linux/x64/release -czf \
+            "dist/transikey-${{ steps.version.outputs.tag }}-linux-x64.tar.gz" \
+            --transform 's/^bundle/transikey/' bundle
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transikey-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish release
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum transikey-* > SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

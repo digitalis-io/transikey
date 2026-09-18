@@ -4,6 +4,16 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.32.8"
+
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
@@ -14,3 +24,23 @@ jobs:
           python-version: '3.12'
       - run: pip install pre-commit
       - run: pre-commit run --all-files
+
+  flutter:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Generate code
+        run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter analyze
+      - name: Unit and BDD tests
+        run: flutter test --exclude-tags integration

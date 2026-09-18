@@ -1,0 +1,52 @@
+Feature: Authentication
+  Users sign in to a Vault or OpenBao server before they can request secrets.
+
+  Background:
+    Given the app is connected to a test server
+
+  Scenario: Sign in with a username and password
+    When I sign in with userpass as {'demo'} and password {'good-password'}
+    Then I see the message {'Signed in'}
+    And I see the message {'demo'}
+
+  Scenario: Sign in with an LDAP account
+    When I sign in with LDAP as {'demo'} and password {'good-password'}
+    Then I see the message {'Signed in'}
+    And I see the message {'ldap'}
+
+  Scenario: A wrong LDAP password is rejected
+    When I sign in with LDAP as {'demo'} and password {'bad-password'}
+    Then I see the message {'Login failed. Check your credentials.'}
+    And I do not see the message {'Signed in'}
+
+  Scenario: A wrong password is rejected
+    When I sign in with userpass as {'demo'} and password {'bad-password'}
+    Then I see the message {'Login failed. Check your credentials.'}
+    And I do not see the message {'Signed in'}
+
+  Scenario: The token form refuses an empty token
+    When I submit the sign in form without credentials
+    Then I see the message {'Required'}
+    And I do not see the message {'Signed in'}
+
+  Scenario: Signing out returns to the sign in form
+    Given I sign in with userpass as {'demo'} and password {'good-password'}
+    When I sign out
+    Then I see the message {'Sign in'}
+    And I do not see the message {'Signed in'}
+
+  Scenario: Picking a remembered server fills in the sign in form
+    Given the servers {'prod'} and {'dev'} are remembered
+    When I pick the server {'prod'}
+    Then the sign in form targets {'https://bao.prod.example:8200'} as {'sergio'}
+
+  Scenario: A new server starts from an empty form
+    Given the servers {'prod'} and {'dev'} are remembered
+    And I pick the server {'prod'}
+    When I pick the server {'New server…'}
+    Then the sign in form targets {''} as {''}
+
+  Scenario: Importing the CLI environment fills in the form without signing in
+    When I import the CLI environment
+    Then the sign in form targets {'https://bao.cli.example:8200'} as {''}
+    And I do not see the message {'Signed in'}

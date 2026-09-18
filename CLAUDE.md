@@ -2,12 +2,12 @@
 
 ## Project Overview
 
-Generic repository scaffolded from `transikey` with `--type other`. Use this type for repos that don't fit the standard stacks (Ansible, Terraform, Go, Python, combined): documentation collections, configuration bundles, scripts, prototypes, design assets, etc.
+Transikey: Flutter desktop client (macOS, Windows, Linux) for OpenBao and HashiCorp Vault. Sign in, request dynamic database and SSH credentials, share secrets once. Repo: `github.com/digitalis-io/transikey` (Digitalis.io brand and commit identity).
 
-If the repo grows into a recognised stack, re-bootstrap with the correct `--type` and migrate the content.
+Scaffolded with `--type other`: no stack-specific bootstrap plugin exists for Flutter.
 
 ## Current Status
-- **Last Updated**: TBD
+- **Last Updated**: 2026-09-18
 - **Current Phase**: Development
 - **Health**: Green
 
@@ -16,18 +16,81 @@ If the repo grows into a recognised stack, re-bootstrap with the correct `--type
 Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from the `claude-skills` marketplace) and are **not** repeated here: terse communication, KnowledgeRelay/RAG sourcing for AxonOps/Digitalis/customer questions, secrets management, signed + DCO commits with brand-based identity, branding, README requirements, `CHANGELOG.md`, and the NEVER-DO list. This file covers only what is specific to `--type other` repos.
 
 ## Active Tasks
-None.
+- PR #1 (`feat/flutter-scaffold` → `main`) open; keep its description in sync with new commits.
+- Profile ideas not built: JSON export/import, profile hint in share links, concurrent sessions (deferred on purpose).
+- Commit `f7c433e` lacks `Signed-off-by` and a Conventional Commit subject; amend before merge if DCO is enforced.
 
 ## Recent Progress
+- 2026-09-18: Multi-database: mount discovery, roles grouped by mount, engine/address detection with manual fallback, `cqlsh`; tagged `v0.1.0-rc3`. Side-by-side credentials were built and dropped on request: picking another role clears the card
+- 2026-09-18: CLI environment import (`core/utils/cli_environment.dart`, `cliEnvironmentProvider`); token is read only on click and lands in the masked field, never in settings
+- 2026-09-18: Server profiles (`ServerProfile`, dropdown, colour tag, Settings list); sharing screen gated on session
+- 2026-09-18: `v0.1.0-rc1` tagged; release workflow proven on all three platforms
+- 2026-09-18: SSH target in dev stack, role-switch clearing, DB and SSH Connect sections, button label fix, docs review applied
+- 2026-09-17: PR #1 opened; CI fixed (global gitignore hid `data/` dirs and `runner.exe.manifest`; fake PEM tripped detect-private-key)
+- 2026-09-17: Keyboard resync on window focus (stuck key after dialog/browser steals focus); sign-out no longer revokes a user-supplied token
 - Initial scaffold from `transikey`
+- 2026-09-17: LDAP and OIDC login; OpenLDAP in dev stack
+- 2026-09-17: Share links (`transikey://unwrap`), app icon from logo, CI + tag release workflow
+- 2026-09-17: Flutter desktop client scaffold (auth, database, SSH, sharing, leases, settings), dev stack, Makefile, tests
 
 ## Blockers & Issues
-None currently.
+- **GPG signing needs the user's terminal**: pinentry (curses) times out from Claude's shell once the agent cache expires. Ask the user to run `! echo test | gpg --clearsign -u sergio.rua@digitalis.io > /dev/null`, then commit.
+- **Global `~/.gitignore` ignores `data/` and `*.manifest`**: after adding directories run `git status --short --ignored`; the repo `.gitignore` re-includes `lib/**/data/` and the Windows manifest.
+- No screen capture or UI scripting permission in Claude's shell: UI is verified through widget-level BDD tests only, never visually.
+- `hooks/validate-commit.sh --help` blocks on stdin: do not call it without input.
+- Not verified: Windows and Linux builds, OIDC against a real IdP, `transikey://` on Windows/Linux, keyboard fix (not reproduced).
+- `ssh/get-attempt-token` does not exist in OpenBao (`404 unsupported path`); client keeps the call per spec.
 
 ## Architecture & Key Decisions
-- **Stack**: Not specified — see project README for what this repo contains
+- **Stack**: Flutter 3.32+ / Dart 3.8 desktop app (macOS, Windows, Linux). Riverpod 3 (Notifier/AsyncNotifier), go_router, Dio, Freezed. Layout: `lib/app`, `lib/core`, `lib/features/<name>/{domain,data,presentation}`
+- **Generated code** (`*.g.dart`, `*.freezed.dart`) is git-ignored: run `make gen` after clone and after model or `.feature` changes
+- **Secrets in models**: every model holding secret material overrides `toString()` with a redacted form; logging goes through `AppLogger` + `Redaction` only
+- **Token location**: `TokenHolder` (memory) and OS keystore; never in provider state or models that reach the UI
+- **Retries**: only requests that never reached the server (connect errors); credential endpoints are not idempotent
+- **Tests**: `make check` (offline: unit + BDD via `bdd_widget_test`), `make dev-up && make test-integration` (live OpenBao + PostgreSQL)
+- **macOS**: App Sandbox off and login keychain, so unsigned builds can use secure storage; revisit for signed releases
+- **Server profiles**: `AppSettings` server-scoped fields always describe the active server; `SettingsNotifier.save` writes them back into the active `ServerProfile` (`syncActiveProfile`). Globals (theme, timeouts, biometrics) are not part of a profile. Switching goes through `switchServerProfile` (confirm, logout, apply); a changed address on the sign-in form detaches rather than overwrites. Profiles hold no secrets
+- **Logout**: revokes only tokens the app minted (userpass, LDAP, OIDC, AppRole); a pasted token is never revoked
+- **Ad-hoc clients** (connection test, share link to another server) get their own empty `TokenHolder`; redirects are never followed
+- **Share links**: `transikey://unwrap?addr=&ns=&token=`; prefill only, confirmation for a foreign server; `/sharing` route is public
+- **OIDC**: loopback listener on `127.0.0.1:8250`, state + nonce checked (`features/auth/data/oidc_login_flow.dart`)
+- **Database mounts**: `databaseMountsProvider` takes `type == database` mounts from `sys/internal/ui/mounts` (no policy needed); the `databaseMount` setting (comma list) is only the fallback. Client methods take the mount as an argument; `VaultMounts` has no database field
+- **Database detection**: `describeDatabaseRole` reads `roles/<role>` then `config/<db_name>`; 403 means manual engine choice. Only host, port and name are parsed from `connection_url`, which is never kept or logged. Targets are saved in `databaseTargets` keyed `mount` (manual) or `mount/connection` (detected); saved host wins over detected (Docker names), detected engine wins over saved. Legacy `databaseClient/Host/Port/Name` are the defaults
+- **Database credentials**: one result at a time, titled `mount/role`; picking another role on any mount clears it (user decision, do not reintroduce side-by-side cards). `detectedDatabaseProvider` is autoDispose and invalidated by Refresh and session cleanup; Connect field edits are debounced (400 ms) before they hit the keystore
+- **bdd_widget_test**: lines above `Feature:` are copied as Dart, so `#` comments there break `make gen`; notes go in the feature description
+- **Connect sections**: host/port/db/user/key path are user settings (Vault does not return them); passwords go through env vars (`PGPASSWORD`, `MYSQL_PWD`, `SSHPASS`), never argv (`cqlsh` prompts instead); all values pass `shellQuote`
+- **Result providers** (`sshCredentialsProvider`, `secretSharingProvider`) are shared across tabs: a generation counter drops stale results; selecting another role clears them
+- **Icons**: `python3 tool/make_icons.py` (pillow + numpy) regenerates macOS/Windows icons and `assets/branding/transikey_mark.png` from `assets/branding/TransiKey_Logo.jpeg`
 - **Pre-commit**: standard hygiene hooks (trailing whitespace, EOF, YAML/JSON validation), `yamllint` (relaxed), `gitleaks` (secret scanning)
-- **No language-specific tooling** — add it if and when the repo gains code in a specific language
+
+## Project Settings
+
+| Item | Value |
+|------|-------|
+| Flutter / Dart | 3.32.8 / 3.8.1 (pinned in CI as `FLUTTER_VERSION`) |
+| App id | `io.digitalis.transikey`, macOS deployment target 13.0 |
+| Branch / PR | `feat/flutter-scaffold` → `main`, PR #1 |
+| Commit identity | `Sergio Rua <sergio.rua@digitalis.io>`, GPG signed + `-s`; no AI trailers in commits, `Assisted-by: Claude Code` in the PR body |
+| Setup | `make gen` (pub get + build_runner) |
+| Offline checks | `make check` (analyze + unit + BDD) |
+| Live tests | `make dev-up && make test-integration` (`BAO_ADDR=http://127.0.0.1:8200`, `BAO_TOKEN=root`) |
+| Run / build | `make run`, `make build` |
+| Release | push tag `vX.Y.Z[-suffix]` → `release.yml` packages macOS zip, Windows zip, Linux tar.gz + `SHA256SUMS.txt` |
+
+Dev stack (`dev/docker-compose.yml`, all bound to `127.0.0.1`, subnet `172.30.0.0/24`):
+
+| Service | Access | Credentials (dev-only defaults) |
+|---------|--------|---------------------------------|
+| OpenBao dev mode | `:8200` | token `root` |
+| userpass | mount `userpass` | `demo` / `transikey-dev` |
+| LDAP (OpenLDAP) | mount `ldap` | `ldapdemo` / `transikey-dev` |
+| AppRole | mount `approle` | `make dev-approle` |
+| PostgreSQL | `:5432`, db `app` | mount `database`: roles `readonly` (10m), `short-lived` (1m), detection allowed; mount `reporting`: role `analyst`, detection denied |
+| sshd | `:2222`, user `ubuntu`, container IP `172.30.0.10` | roles `sign` (CA cert), `otp` (request OTP for `172.30.0.10`) |
+
+Policy `transikey` (in `dev/init.sh`) is the reference for least-privilege access the app needs.
+
+Test layout: `test/core`, `test/features` (unit), `test/bdd/*.feature` + `test/bdd/step/` (BDD, generated `*_test.dart` committed), `test/integration` (tag `integration`).
 
 ## Required Claude Code plugins
 

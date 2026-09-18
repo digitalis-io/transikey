@@ -1,0 +1,3 @@
+tags:
+  integration:
+    description: Needs a live OpenBao / Vault server (see dev/docker-compose.yml).
