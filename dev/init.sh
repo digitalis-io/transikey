@@ -1,7 +1,8 @@
 #!/bin/sh
 # Configures the OpenBao dev server for Transikey testing:
 #   - userpass user, AppRole role and LDAP auth bound to the "transikey" policy
-#   - database secrets engine connected to the compose PostgreSQL
+#   - database secrets engine connected to the compose PostgreSQL, mounted
+#     twice (database, reporting)
 #   - SSH secrets engine with an OTP role and a CA signing role
 #
 # Idempotent: safe to run again against the same server.
@@ -44,6 +45,17 @@ bao policy write transikey - >/dev/null <<'POLICY'
 # Dynamic database credentials
 path "database/roles"    { capabilities = ["list"] }
 path "database/creds/*"  { capabilities = ["read"] }
+
+# Optional: lets the app detect the engine, host, port and database name
+# behind a role, so the user does not have to type them. The server never
+# returns the connection password on these paths.
+path "database/roles/*"  { capabilities = ["read"] }
+path "database/config/*" { capabilities = ["read"] }
+
+# A second database mount, without the optional paths: the app asks for the
+# engine and address here.
+path "reporting/roles"   { capabilities = ["list"] }
+path "reporting/creds/*" { capabilities = ["read"] }
 
 # SSH one-time passwords and certificate signing
 path "ssh/roles"         { capabilities = ["list"] }
@@ -106,6 +118,28 @@ bao write database/roles/short-lived \
   default_ttl=1m \
   max_ttl=5m >/dev/null
 log "database roles readonly, short-lived ready"
+
+# Second mount of the same engine type: the app lists roles of every
+# database mount it can see. enable() only handles a mount whose path equals
+# its type, so the check is inline here.
+if bao secrets list -format=json | grep -q "\"reporting/\""; then
+  log "secrets reporting already enabled"
+else
+  bao secrets enable -path=reporting database >/dev/null
+  log "secrets reporting enabled"
+fi
+bao write reporting/config/postgres \
+  plugin_name=postgresql-database-plugin \
+  allowed_roles="analyst" \
+  connection_url="postgresql://{{username}}:{{password}}@postgres:5432/app?sslmode=disable" \
+  username=postgres \
+  password="$DEV_POSTGRES_PASSWORD" >/dev/null
+bao write reporting/roles/analyst \
+  db_name=postgres \
+  creation_statements="$creation" \
+  default_ttl=10m \
+  max_ttl=1h >/dev/null
+log "reporting role analyst ready"
 
 enable secrets ssh
 bao write ssh/roles/otp \

@@ -3,7 +3,6 @@ import 'package:equatable/equatable.dart';
 /// Secrets engine and auth method mount paths (no leading or trailing slash).
 class VaultMounts extends Equatable {
   const VaultMounts({
-    this.database = 'database',
     this.ssh = 'ssh',
     this.userpass = 'userpass',
     this.approle = 'approle',
@@ -11,7 +10,6 @@ class VaultMounts extends Equatable {
     this.oidc = 'oidc',
   });
 
-  final String database;
   final String ssh;
   final String userpass;
   final String approle;
@@ -19,7 +17,7 @@ class VaultMounts extends Equatable {
   final String oidc;
 
   @override
-  List<Object?> get props => [database, ssh, userpass, approle, ldap, oidc];
+  List<Object?> get props => [ssh, userpass, approle, ldap, oidc];
 }
 
 /// Everything the HTTP client needs to reach a server. Equivalent to

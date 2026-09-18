@@ -1,5 +1,6 @@
 import '../models/auth_response.dart';
 import '../models/database_credentials.dart';
+import '../utils/db_target_detection.dart';
 import '../models/health_status.dart';
 import '../models/lease_info.dart';
 import '../models/ssh_credentials.dart';
@@ -42,9 +43,19 @@ abstract class VaultApiClient {
   Future<void> revokeSelf();
 
   // --- database -----------------------------------------------------------
-  Future<List<String>> listDatabaseRoles();
+  /// Secrets engine mounts visible to the token, as `path -> type`, paths
+  /// without a trailing slash. Backed by `sys/internal/ui/mounts`, which
+  /// needs no policy of its own.
+  Future<Map<String, String>> listSecretMounts();
 
-  Future<DatabaseCredentials> getDatabaseCredentials(String role);
+  Future<List<String>> listDatabaseRoles(String mount);
+
+  /// Engine and address behind [role], read from the role and connection
+  /// configuration. Most least-privilege tokens may not read either: that
+  /// surfaces as a [PermissionDeniedException].
+  Future<DetectedDatabase> describeDatabaseRole(String mount, String role);
+
+  Future<DatabaseCredentials> getDatabaseCredentials(String mount, String role);
 
   // --- leases -------------------------------------------------------------
   Future<LeaseInfo> renewLease(String leaseId, {Duration? increment});

@@ -75,9 +75,11 @@ class _SshScreenState extends ConsumerState<SshScreen> {
         scrollable: false,
         child: ResizableSplit(
           left: RolePicker(
-            roles: ref.watch(sshRolesProvider),
-            selected: _role,
-            onSelected: (r) {
+            groups: ref
+                .watch(sshRolesProvider)
+                .whenData((roles) => [RoleGroup(roles: roles)]),
+            selected: _role == null ? null : ('', _role!),
+            onSelected: (_, r) {
               if (r == _role) return;
               // Results of the previous role must not linger on screen.
               notifier.clear();

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../errors/vault_exception.dart';
 import '../models/auth_response.dart';
 import '../models/database_credentials.dart';
+import '../utils/db_target_detection.dart';
 import '../models/health_status.dart';
 import '../models/lease_info.dart';
 import '../models/ssh_credentials.dart';
@@ -173,24 +174,65 @@ class DioVaultApiClient implements VaultApiClient {
   // --- database -----------------------------------------------------------
 
   @override
-  Future<List<String>> listDatabaseRoles() =>
-      _guard(() => _list('/v1/${_mounts.database}/roles'));
+  Future<Map<String, String>> listSecretMounts() => _guard(() async {
+    final envelope = await _request('GET', '/v1/sys/internal/ui/mounts');
+    final secret = _asMap((envelope.data ?? const {})['secret']);
+    return {
+      for (final e in secret.entries)
+        e.key.replaceAll(RegExp(r'/+$'), ''):
+            '${_asMap(e.value)['type'] ?? ''}',
+    };
+  });
 
   @override
-  Future<DatabaseCredentials> getDatabaseCredentials(String role) =>
+  Future<List<String>> listDatabaseRoles(String mount) =>
+      _guard(() => _list('/v1/${_path(mount)}/roles'));
+
+  @override
+  Future<DetectedDatabase> describeDatabaseRole(String mount, String role) =>
       _guard(() async {
-        final envelope = await _request(
-          'GET',
-          '/v1/${_mounts.database}/creds/${_segment(role, 'Role')}',
-        );
-        final data = envelope.data ?? const {};
-        return DatabaseCredentials(
-          role: role,
-          username: data['username'] as String? ?? '',
-          password: data['password'] as String? ?? '',
-          lease: _leaseFrom(envelope),
+        final base = '/v1/${_path(mount)}';
+        final roleData =
+            (await _request(
+              'GET',
+              '$base/roles/${_segment(role, 'Role')}',
+            )).data ??
+            const {};
+        final connection = '${roleData['db_name'] ?? ''}';
+        if (connection.isEmpty) {
+          throw const NotFoundException('Role names no connection.');
+        }
+        final config =
+            (await _request(
+              'GET',
+              '$base/config/${_segment(connection, 'Connection')}',
+            )).data ??
+            const {};
+        return detectDatabase(
+          connection,
+          '${config['plugin_name'] ?? ''}',
+          _asMap(config['connection_details']),
         );
       });
+
+  @override
+  Future<DatabaseCredentials> getDatabaseCredentials(
+    String mount,
+    String role,
+  ) => _guard(() async {
+    final envelope = await _request(
+      'GET',
+      '/v1/${_path(mount)}/creds/${_segment(role, 'Role')}',
+    );
+    final data = envelope.data ?? const {};
+    return DatabaseCredentials(
+      mount: mount,
+      role: role,
+      username: data['username'] as String? ?? '',
+      password: data['password'] as String? ?? '',
+      lease: _leaseFrom(envelope),
+    );
+  });
 
   // --- leases -------------------------------------------------------------
 
@@ -433,13 +475,24 @@ class DioVaultApiClient implements VaultApiClient {
   String _segment(String value, String label) {
     final clean = value.trim();
     if (clean.isEmpty) throw ValidationException('$label is required.');
-    return clean.split('/').map(Uri.encodeComponent).join('/');
+    return _encode(clean, label);
   }
 
   String _path(String value) {
     final clean = value.trim().replaceAll(RegExp(r'^/+|/+$'), '');
     if (clean.isEmpty) throw const ValidationException('Path is required.');
-    return clean.split('/').map(Uri.encodeComponent).join('/');
+    return _encode(clean, 'Path');
+  }
+
+  /// Names come from the user and from the server. A dot segment would
+  /// walk out of the mount once the URL is normalised, with the token
+  /// attached.
+  String _encode(String value, String label) {
+    final parts = value.split('/');
+    if (parts.any((p) => p.isEmpty || p == '.' || p == '..')) {
+      throw ValidationException('$label is not a valid path.');
+    }
+    return parts.map(Uri.encodeComponent).join('/');
   }
 
   Map<String, dynamic> _asMap(Object? body) =>

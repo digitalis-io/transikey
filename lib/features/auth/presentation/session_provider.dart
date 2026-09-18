@@ -23,6 +23,13 @@ final vaultSessionProvider =
       VaultSessionNotifier.new,
     );
 
+/// True while a token is in memory. Server reads watch this, so they never
+/// run without a token (signed out, or locked under the lock overlay) and
+/// run again as soon as the session starts or is unlocked.
+final sessionActiveProvider = Provider<bool>(
+  (ref) => ref.watch(vaultSessionProvider) is SessionAuthenticated,
+);
+
 /// Owns the session lifecycle: establish, renew, expire, lock and logout.
 class VaultSessionNotifier extends Notifier<SessionState> {
   Timer? _expiryTimer;

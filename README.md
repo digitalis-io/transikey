@@ -64,17 +64,24 @@ Run `make help` for every task.
 ### 1. Get temporary database credentials
 
 1. Open **Database Credentials** (`Cmd/Ctrl+2`).
-2. Pick the `short-lived` role, then **Request credentials**.
+2. Pick the `short-lived` role, then **Request credentials**. Roles of every database mount the server shows you are listed, grouped by mount (`database`, `cass001`, `cass002`…).
 3. Reveal or copy the username and password. The clipboard clears after 30 seconds.
 4. Watch the lease count down: green (active), yellow (expiring soon), red (expired). **Renew** or **Revoke** from the same card or from **Lease Management**.
 
-5. Use the **Connect** section of the card: choose PostgreSQL or MySQL, set host, port and database (remembered for next time), then copy the ready-made command or the connection URI:
+5. Use the **Connect** section of the card, then copy the ready-made command or the connection URI. When your policy allows it (see below), the engine, host, port and database are read from the server. Otherwise choose PostgreSQL, MySQL or Cassandra and type them once: they are remembered per mount. A host you type always wins, because the server often knows the database under a name only it can resolve:
 
    ```bash
    PGPASSWORD='<password>' psql -h '127.0.0.1' -p 5432 -U '<username>' -d 'app'
    ```
 
-   The password travels in an environment variable, not as an argument, so it does not show up in `ps`. Picking another role clears the card, so credentials of one role never sit next to another.
+   The password travels in an environment variable, not as an argument, so it does not show up in `ps`. `cqlsh` has no such variable: its command leaves the password out and `cqlsh` asks for it. Copy the password from the card when it prompts. Picking another role, on any mount, clears the card, so credentials of one role never sit next to another.
+
+   Optional policy that lets the app detect the engine and address behind a role (the server never returns the connection password on these paths):
+
+   ```hcl
+   path "database/roles/*"  { capabilities = ["read"] }
+   path "database/config/*" { capabilities = ["read"] }
+   ```
 
 ### 2. Hand a secret to a colleague, once
 
@@ -145,22 +152,22 @@ All settings live in **Settings** (`Cmd/Ctrl+,`) and are stored in the OS keysto
 | Biometric unlock | bool | off | on (Touch ID, Windows Hello) |
 | Blur window when it loses focus | bool | on | off |
 | Theme | `system` / `light` / `dark` | `system` | `dark` |
-| Database mount | path | `database` | `postgres-prod` |
+| Database mount | comma separated paths, used only when the server does not list its mounts | `database` | `cass001, cass002` |
 | SSH mount | path | `ssh` | `ssh-client-signer` |
 | Userpass mount | path | `userpass` | `userpass-ops` |
 | AppRole mount | path | `approle` | `approle-ci` |
 | LDAP mount | path | `ldap` | `ldap-corp` |
 | OIDC mount | path | `oidc` | `okta` |
-| Database client (Connect section) | `psql` / `mysql` | `psql` | `mysql` |
+| Database client (Connect section) | `psql` / `mysql` / `cqlsh` | `psql` | `cqlsh` |
 | Database host | string | `127.0.0.1` | `pg.internal.example.com` |
 | Database port | integer | `5432` | `3306` |
-| Database name | string | `app` | `orders` |
+| Database name (keyspace for Cassandra) | string | `app` | `orders` |
 | SSH user (Connect section) | string | `ubuntu` | `ops` |
 | SSH host | string | `127.0.0.1` | `bastion.example.com` |
 | SSH port | integer | `2222` | `22` |
 | SSH private key path | path | `~/.ssh/id_ed25519` | `~/.ssh/work_ed25519` |
 
-The Database and SSH rows are edited in the **Connect** section of their screens, not under Settings; the defaults match the dev stack.
+The Database and SSH rows are edited in the **Connect** section of their screens, not under Settings; the defaults match the dev stack. Database values are kept per mount (per connection when the server reveals it); the defaults apply to a mount you have not edited yet.
 
 Dev stack environment variables. Set them in the shell before `make dev-up`:
 

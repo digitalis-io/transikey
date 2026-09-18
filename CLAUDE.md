@@ -21,6 +21,7 @@ Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from th
 - Commit `f7c433e` lacks `Signed-off-by` and a Conventional Commit subject; amend before merge if DCO is enforced.
 
 ## Recent Progress
+- 2026-09-18: Multi-database: mount discovery, roles grouped by mount, engine/address detection with manual fallback, `cqlsh`; tagged `v0.1.0-rc3`. Side-by-side credentials were built and dropped on request: picking another role clears the card
 - 2026-09-18: CLI environment import (`core/utils/cli_environment.dart`, `cliEnvironmentProvider`); token is read only on click and lands in the masked field, never in settings
 - 2026-09-18: Server profiles (`ServerProfile`, dropdown, colour tag, Settings list); sharing screen gated on session
 - 2026-09-18: `v0.1.0-rc1` tagged; release workflow proven on all three platforms
@@ -53,7 +54,11 @@ Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from th
 - **Ad-hoc clients** (connection test, share link to another server) get their own empty `TokenHolder`; redirects are never followed
 - **Share links**: `transikey://unwrap?addr=&ns=&token=`; prefill only, confirmation for a foreign server; `/sharing` route is public
 - **OIDC**: loopback listener on `127.0.0.1:8250`, state + nonce checked (`features/auth/data/oidc_login_flow.dart`)
-- **Connect sections**: host/port/db/user/key path are user settings (Vault does not return them); passwords go through env vars (`PGPASSWORD`, `MYSQL_PWD`, `SSHPASS`), never argv; all values pass `shellQuote`
+- **Database mounts**: `databaseMountsProvider` takes `type == database` mounts from `sys/internal/ui/mounts` (no policy needed); the `databaseMount` setting (comma list) is only the fallback. Client methods take the mount as an argument; `VaultMounts` has no database field
+- **Database detection**: `describeDatabaseRole` reads `roles/<role>` then `config/<db_name>`; 403 means manual engine choice. Only host, port and name are parsed from `connection_url`, which is never kept or logged. Targets are saved in `databaseTargets` keyed `mount` (manual) or `mount/connection` (detected); saved host wins over detected (Docker names), detected engine wins over saved. Legacy `databaseClient/Host/Port/Name` are the defaults
+- **Database credentials**: one result at a time, titled `mount/role`; picking another role on any mount clears it (user decision, do not reintroduce side-by-side cards). `detectedDatabaseProvider` is autoDispose and invalidated by Refresh and session cleanup; Connect field edits are debounced (400 ms) before they hit the keystore
+- **bdd_widget_test**: lines above `Feature:` are copied as Dart, so `#` comments there break `make gen`; notes go in the feature description
+- **Connect sections**: host/port/db/user/key path are user settings (Vault does not return them); passwords go through env vars (`PGPASSWORD`, `MYSQL_PWD`, `SSHPASS`), never argv (`cqlsh` prompts instead); all values pass `shellQuote`
 - **Result providers** (`sshCredentialsProvider`, `secretSharingProvider`) are shared across tabs: a generation counter drops stale results; selecting another role clears them
 - **Icons**: `python3 tool/make_icons.py` (pillow + numpy) regenerates macOS/Windows icons and `assets/branding/transikey_mark.png` from `assets/branding/TransiKey_Logo.jpeg`
 - **Pre-commit**: standard hygiene hooks (trailing whitespace, EOF, YAML/JSON validation), `yamllint` (relaxed), `gitleaks` (secret scanning)
@@ -80,7 +85,7 @@ Dev stack (`dev/docker-compose.yml`, all bound to `127.0.0.1`, subnet `172.30.0.
 | userpass | mount `userpass` | `demo` / `transikey-dev` |
 | LDAP (OpenLDAP) | mount `ldap` | `ldapdemo` / `transikey-dev` |
 | AppRole | mount `approle` | `make dev-approle` |
-| PostgreSQL | `:5432`, db `app` | roles `readonly` (10m), `short-lived` (1m) |
+| PostgreSQL | `:5432`, db `app` | mount `database`: roles `readonly` (10m), `short-lived` (1m), detection allowed; mount `reporting`: role `analyst`, detection denied |
 | sshd | `:2222`, user `ubuntu`, container IP `172.30.0.10` | roles `sign` (CA cert), `otp` (request OTP for `172.30.0.10`) |
 
 Policy `transikey` (in `dev/init.sh`) is the reference for least-privilege access the app needs.

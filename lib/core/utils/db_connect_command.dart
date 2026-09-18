@@ -2,7 +2,8 @@ import 'shell_quote.dart';
 
 enum DbClient {
   psql('psql', 'PostgreSQL', 5432),
-  mysql('mysql', 'MySQL / MariaDB', 3306);
+  mysql('mysql', 'MySQL / MariaDB', 3306),
+  cqlsh('cqlsh', 'Cassandra', 9042);
 
   const DbClient(this.binary, this.label, this.defaultPort);
 
@@ -29,7 +30,8 @@ class DbTarget {
 
 /// Shell one-liner that connects with dynamic credentials. The password
 /// travels through the client's environment variable, not through argv,
-/// so it does not show up in `ps`.
+/// so it does not show up in `ps`. cqlsh has no such variable: it prompts
+/// for the password, and [DbTarget.database] is an optional keyspace.
 String dbConnectCommand(DbTarget target, String username, String password) {
   final host = shellQuote(target.host.trim());
   final user = shellQuote(username);
@@ -41,15 +43,21 @@ String dbConnectCommand(DbTarget target, String username, String password) {
     DbClient.mysql =>
       'MYSQL_PWD=${shellQuote(password)} mysql '
           '-h $host -P ${target.port} -u $user $db',
+    DbClient.cqlsh =>
+      'cqlsh $host ${target.port} -u $user'
+          '${target.database.trim().isEmpty ? '' : ' -k $db'}',
   };
 }
 
 /// Connection URI for tools that take one (DBeaver, DataGrip, drivers).
-String dbConnectUri(DbTarget target, String username, String password) {
+/// Null for Cassandra, which has no URI form.
+String? dbConnectUri(DbTarget target, String username, String password) {
   final scheme = switch (target.client) {
     DbClient.psql => 'postgresql',
     DbClient.mysql => 'mysql',
+    DbClient.cqlsh => null,
   };
+  if (scheme == null) return null;
   return Uri(
     scheme: scheme,
     userInfo:

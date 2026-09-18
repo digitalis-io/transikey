@@ -47,6 +47,29 @@ void main() {
     expect(dbConnectCommand(t, 'u', 'p'), endsWith("-d 'app'"));
   });
 
+  test('cqlsh prompts for the password: it never appears in the command', () {
+    const cs = DbTarget(
+      client: DbClient.cqlsh,
+      host: 'c1.internal',
+      port: 9042,
+      database: '',
+    );
+    final command = dbConnectCommand(cs, 'v-user', 's3cret');
+    expect(command, "cqlsh 'c1.internal' 9042 -u 'v-user'");
+    expect(command, isNot(contains('s3cret')));
+    expect(dbConnectUri(cs, 'v-user', 's3cret'), isNull);
+  });
+
+  test('cqlsh takes the keyspace when one is set', () {
+    const cs = DbTarget(
+      client: DbClient.cqlsh,
+      host: 'c1',
+      port: 9042,
+      database: 'metrics',
+    );
+    expect(dbConnectCommand(cs, 'u', 'p'), endsWith("-u 'u' -k 'metrics'"));
+  });
+
   test('the URI percent-encodes user and password', () {
     expect(
       dbConnectUri(pg, 'v-token', 'p@ss/w:ord'),

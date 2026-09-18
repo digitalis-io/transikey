@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers/core_providers.dart';
+import '../../auth/presentation/session_provider.dart';
 import '../../leases/presentation/leases_provider.dart';
 import '../data/vault_ssh_repository.dart';
 import '../domain/ssh_repository.dart';
@@ -9,9 +10,10 @@ final sshRepositoryProvider = Provider<SshRepository>(
   (ref) => VaultSshRepository(ref.watch(apiClientProvider)),
 );
 
-final sshRolesProvider = FutureProvider<List<String>>(
-  (ref) => ref.watch(sshRepositoryProvider).listRoles(),
-);
+final sshRolesProvider = FutureProvider<List<String>>((ref) async {
+  if (!ref.watch(sessionActiveProvider)) return const [];
+  return ref.watch(sshRepositoryProvider).listRoles();
+});
 
 /// Result of the last SSH operation. `AsyncData(null)` is the empty state.
 final sshCredentialsProvider =

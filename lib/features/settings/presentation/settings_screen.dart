@@ -294,7 +294,13 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
               for (final e in _mounts.entries)
                 TextField(
                   controller: e.value,
-                  decoration: InputDecoration(labelText: e.key),
+                  decoration: InputDecoration(
+                    labelText: e.key,
+                    helperText: e.key == 'Database mount'
+                        ? 'Used when the server does not list its mounts. '
+                              'Separate several with commas.'
+                        : null,
+                  ),
                 ),
             ]),
             Align(

@@ -3,6 +3,21 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'server_profile.freezed.dart';
 part 'server_profile.g.dart';
 
+/// Connect target remembered for one database mount or connection. Host,
+/// port and name only: no credentials.
+@freezed
+abstract class SavedDbTarget with _$SavedDbTarget {
+  const factory SavedDbTarget({
+    @Default('psql') String client,
+    @Default('') String host,
+    @Default(0) int port,
+    @Default('') String database,
+  }) = _SavedDbTarget;
+
+  factory SavedDbTarget.fromJson(Map<String, dynamic> json) =>
+      _$SavedDbTargetFromJson(json);
+}
+
 /// Everything that belongs to one Vault / OpenBao server: how to reach it,
 /// where its engines are mounted, and the connect targets used with it.
 /// Holds no secrets. The last username is kept; passwords and tokens never.
@@ -30,6 +45,10 @@ abstract class ServerProfile with _$ServerProfile {
     @Default('127.0.0.1') String databaseHost,
     @Default(5432) int databasePort,
     @Default('app') String databaseName,
+
+    /// Connect targets keyed by `mount` or `mount/connection`. The four
+    /// fields above are the default for a key that is not in here.
+    @Default({}) Map<String, SavedDbTarget> databaseTargets,
     @Default('ubuntu') String sshUser,
     @Default('127.0.0.1') String sshHost,
     @Default(2222) int sshPort,

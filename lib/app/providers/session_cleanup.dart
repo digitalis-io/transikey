@@ -14,6 +14,7 @@ final sessionCleanupProvider = Provider<void>((ref) {
     if (next is SessionAuthenticated) return;
     ref.invalidate(databaseCredentialsProvider);
     ref.invalidate(databaseRolesProvider);
+    ref.invalidate(detectedDatabaseProvider);
     ref.invalidate(sshCredentialsProvider);
     ref.invalidate(sshRolesProvider);
     ref.invalidate(secretSharingProvider);

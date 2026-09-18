@@ -16,6 +16,7 @@ import 'package:transikey/core/api/dio_factory.dart';
 import 'package:transikey/core/api/dio_vault_api_client.dart';
 import 'package:transikey/core/api/vault_connection_config.dart';
 import 'package:transikey/core/errors/vault_exception.dart';
+import 'package:transikey/core/utils/db_connect_command.dart';
 import 'package:transikey/core/utils/app_logger.dart';
 
 const _publicKey =
@@ -180,14 +181,14 @@ void main() {
     test('roles are listed', () async {
       await signInAsUser();
       expect(
-        await client.listDatabaseRoles(),
+        await client.listDatabaseRoles('database'),
         containsAll(['readonly', 'short-lived']),
       );
     });
 
     test('credentials are issued, renewed, then revoked', () async {
       await signInAsUser();
-      final creds = await client.getDatabaseCredentials('readonly');
+      final creds = await client.getDatabaseCredentials('database', 'readonly');
       expect(creds.username, isNotEmpty);
       expect(creds.password, isNotEmpty);
       expect(creds.lease.leaseId, startsWith('database/creds/readonly/'));
@@ -204,17 +205,55 @@ void main() {
       );
     });
 
+    test('database mounts are discovered without extra policy', () async {
+      await signInAsUser();
+      final mounts = await client.listSecretMounts();
+      expect(mounts['database'], 'database');
+      expect(mounts['reporting'], 'database');
+      expect(mounts['ssh'], 'ssh');
+    });
+
+    test('a second mount issues credentials of its own', () async {
+      await signInAsUser();
+      expect(await client.listDatabaseRoles('reporting'), ['analyst']);
+      final creds = await client.getDatabaseCredentials('reporting', 'analyst');
+      expect(creds.key, 'reporting/analyst');
+      expect(creds.lease.leaseId, startsWith('reporting/creds/analyst/'));
+      await client.revokeLease(creds.lease.leaseId);
+    });
+
+    test('the engine and address are detected where policy allows', () async {
+      await signInAsUser();
+      final detected = await client.describeDatabaseRole(
+        'database',
+        'readonly',
+      );
+      expect(detected.connection, 'postgres');
+      expect(detected.client, DbClient.psql);
+      expect(detected.host, 'postgres');
+      expect(detected.port, 5432);
+      expect(detected.database, 'app');
+    });
+
+    test('detection is denied where policy does not allow it', () async {
+      await signInAsUser();
+      await expectLater(
+        client.describeDatabaseRole('reporting', 'analyst'),
+        throwsA(isA<PermissionDeniedException>()),
+      );
+    });
+
     test('an unknown role is rejected', () async {
       await signInAsUser();
       await expectLater(
-        client.getDatabaseCredentials('no-such-role'),
+        client.getDatabaseCredentials('database', 'no-such-role'),
         throwsA(isA<VaultException>()),
       );
     });
 
     test('an unauthenticated request is denied', () async {
       await expectLater(
-        client.getDatabaseCredentials('readonly'),
+        client.getDatabaseCredentials('database', 'readonly'),
         throwsA(isA<PermissionDeniedException>()),
       );
     });

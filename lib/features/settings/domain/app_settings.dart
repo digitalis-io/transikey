@@ -35,6 +35,10 @@ abstract class AppSettings with _$AppSettings {
     @Default('127.0.0.1') String databaseHost,
     @Default(5432) int databasePort,
     @Default('app') String databaseName,
+
+    /// Connect targets keyed by `mount` or `mount/connection`. The four
+    /// fields above are the default for a key that is not in here.
+    @Default({}) Map<String, SavedDbTarget> databaseTargets,
     @Default('ubuntu') String sshUser,
     @Default('127.0.0.1') String sshHost,
     @Default(2222) int sshPort,
@@ -80,6 +84,7 @@ abstract class AppSettings with _$AppSettings {
     databaseHost: databaseHost,
     databasePort: databasePort,
     databaseName: databaseName,
+    databaseTargets: databaseTargets,
     sshUser: sshUser,
     sshHost: sshHost,
     sshPort: sshPort,
@@ -106,6 +111,7 @@ abstract class AppSettings with _$AppSettings {
     databaseHost: p.databaseHost,
     databasePort: p.databasePort,
     databaseName: p.databaseName,
+    databaseTargets: p.databaseTargets,
     sshUser: p.sshUser,
     sshHost: p.sshHost,
     sshPort: p.sshPort,
@@ -137,7 +143,6 @@ abstract class AppSettings with _$AppSettings {
     tlsVerify: tlsVerify,
     caCertPem: caCertPem,
     mounts: VaultMounts(
-      database: _mount(databaseMount, 'database'),
       ssh: _mount(sshMount, 'ssh'),
       userpass: _mount(userpassMount, 'userpass'),
       approle: _mount(approleMount, 'approle'),
@@ -145,6 +150,16 @@ abstract class AppSettings with _$AppSettings {
       oidc: _mount(oidcMount, 'oidc'),
     ),
   );
+
+  /// Database mounts to use when the server does not reveal them. The
+  /// setting is a comma separated list.
+  List<String> get databaseMountList {
+    final mounts = {
+      for (final m in databaseMount.split(','))
+        if (m.trim().isNotEmpty) _mount(m, 'database'),
+    };
+    return mounts.isEmpty ? const ['database'] : mounts.toList();
+  }
 
   static String _mount(String value, String fallback) {
     final clean = value.trim().replaceAll(RegExp(r'^/+|/+$'), '');

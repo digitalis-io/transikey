@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Added
+- Several database mounts at once: mounts are discovered from the server (`sys/internal/ui/mounts`), roles are grouped by mount, and the Database mount setting becomes a comma separated fallback
+- Engine, host, port and database are detected from the role's connection when policy allows; otherwise they are chosen once and remembered per mount
+- Cassandra (`cqlsh`) in the Connect section; the password is never part of the command
+- Second database mount (`reporting`) and optional detection policy in the dev stack
 - Flutter desktop application scaffold (macOS, Windows, Linux) with Clean Architecture layout
 - `VaultApiClient` abstraction and Dio implementation: header injection, retry, redacted logging, TLS options, typed errors
 - Token, userpass and AppRole sign-in; session renewal, expiry, inactivity lock, biometric unlock
@@ -37,6 +41,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - Credentials of the previous role stayed on screen after picking another role (Database and SSH)
 - Debug builds: one out-of-sync key event (a key Flutter still believed pressed) blocked all typing until restart; the stale event is now dropped and the next key press recovers. The window-focus keyboard resync is gone: it could only add pressed keys, never clear them
+- Database and SSH role lists were requested without a token while the session was locked or signed out; the resulting "Permission denied" stayed on screen until a manual refresh. Roles now load only for an active session and reload on sign-in and unlock
 - Results of a request could appear under another tab after switching tabs
 - Locking the session no longer loses the current screen
 - Secret Sharing offered Wrap and Cubbyhole while signed out and failed with "permission denied"; those actions are now disabled with a sign-in hint, and the screen opens on Unwrap, which needs no session
