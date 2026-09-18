@@ -115,12 +115,17 @@ bao write ssh/roles/otp \
 if ! bao read ssh/config/ca >/dev/null 2>&1; then
   bao write ssh/config/ca generate_signing_key=true >/dev/null
 fi
-bao write ssh/roles/sign \
-  key_type=ca \
-  allow_user_certificates=true \
-  allowed_users="*" \
-  default_user=ubuntu \
-  ttl=30m >/dev/null
+# JSON body: default_extensions is a map, which key=value syntax cannot express.
+bao write ssh/roles/sign - >/dev/null <<'JSON'
+{
+  "key_type": "ca",
+  "allow_user_certificates": true,
+  "allowed_users": "*",
+  "default_user": "ubuntu",
+  "default_extensions": {"permit-pty": ""},
+  "ttl": "30m"
+}
+JSON
 log "ssh roles otp, sign ready"
 
 cat <<SUMMARY
@@ -130,5 +135,7 @@ cat <<SUMMARY
   token     the DEV_BAO_ROOT_TOKEN value (default: root)
   userpass  user "$DEV_USER", password from DEV_USER_PASSWORD
   ldap      user from DEV_LDAP_USER (default: ldapdemo), password from DEV_LDAP_USER_PASSWORD
+
+[init] SSH target: ssh -p 2222 ubuntu@127.0.0.1 (container IP 172.30.0.10, use it for OTPs)
   approle   make dev-approle
 SUMMARY

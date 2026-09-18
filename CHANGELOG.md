@@ -21,5 +21,6 @@ All notable changes to this project will be documented in this file.
 - Transikey logo as application icon (macOS, Windows), sidebar and lock screen mark; `tool/make_icons.py` regenerates icons
 - LDAP sign-in and browser based OIDC sign-in (loopback callback on port 8250, state and nonce checked); configurable LDAP and OIDC mount paths
 - OpenLDAP with a test user in the dev stack
+- SSH server in the dev stack that accepts OpenBao signed certificates and one-time passwords (`vault-ssh-helper`)
 - CI job for formatting, analysis and tests; tag-triggered release workflow that packages macOS, Windows and Linux builds with SHA-256 checksums
 - Initial project scaffold bootstrapped from automation/bootstrap

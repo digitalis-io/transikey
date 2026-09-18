@@ -21,7 +21,7 @@ You need [Flutter](https://docs.flutter.dev/get-started/install) 3.32 or newer a
 ```bash
 git clone git@github.com:digitalis-io/transikey.git && cd transikey
 make gen        # fetch packages, generate Freezed / JSON code
-make dev-up     # OpenBao (dev mode) + PostgreSQL + OpenLDAP, fully configured
+make dev-up     # OpenBao (dev mode), PostgreSQL, OpenLDAP, SSH target; fully configured
 make run        # start the app
 ```
 
@@ -75,13 +75,28 @@ bao write -wrap-ttl=30m sys/wrapping/wrap secret='s3cr3t'          # sender
 BAO_ADDR='https://vault.example.com:8200' bao unwrap '<token>'   # recipient
 ```
 
-### 3. Sign an SSH key
+### 3. Log in over SSH with a signed key or a one-time password
+
+The dev stack includes an SSH server (`ssh -p 2222 ubuntu@127.0.0.1`, container IP `172.30.0.10`) that trusts the OpenBao SSH CA and verifies OTPs through `vault-ssh-helper`.
+
+Signed key:
 
 1. Open **SSH Access** (`Cmd/Ctrl+3`), choose the `sign` role, tab **Sign public key**.
 2. **Upload public key** (for example `~/.ssh/id_ed25519.pub`), then **Sign key**.
-3. **Download certificate** and save it as `~/.ssh/id_ed25519-cert.pub`. `ssh` picks it up automatically.
+3. **Download certificate** and save it next to the key as `~/.ssh/id_ed25519-cert.pub`. `ssh` picks it up automatically:
 
-The **One-time password** tab issues an OTP for a target IP with the `otp` role.
+   ```bash
+   ssh -p 2222 -i ~/.ssh/id_ed25519 ubuntu@127.0.0.1
+   ```
+
+One-time password:
+
+1. Choose the `otp` role, tab **One-time password**, target IP `172.30.0.10` (the OTP is bound to the IP of the server it is meant for), then **Generate OTP**.
+2. Connect and paste the OTP at the password prompt. It works exactly once:
+
+   ```bash
+   ssh -p 2222 -o PreferredAuthentications=keyboard-interactive ubuntu@127.0.0.1
+   ```
 
 ## Configuration reference
 
@@ -117,6 +132,8 @@ Dev stack environment variables. Set them in the shell before `make dev-up`:
 | `DEV_USER` / `DEV_USER_PASSWORD` | `demo` / `transikey-dev` | `DEV_USER=alice` |
 | `DEV_LDAP_USER` / `DEV_LDAP_USER_PASSWORD` | `ldapdemo` / `transikey-dev` | `DEV_LDAP_USER=bob` |
 | `DEV_LDAP_ADMIN_PASSWORD` | `transikey-dev` | `DEV_LDAP_ADMIN_PASSWORD=local-only` |
+| `DEV_SSHD_PORT` / `DEV_SSHD_IP` | `2222` / `172.30.0.10` | `DEV_SSHD_PORT=2200` |
+| `DEV_SUBNET` | `172.30.0.0/24` | `DEV_SUBNET=10.99.0.0/24` (keep `DEV_SSHD_IP` inside it) |
 
 The dev stack is for local testing only: dev mode keeps data in memory, uses a fixed root token and binds to `127.0.0.1`.
 

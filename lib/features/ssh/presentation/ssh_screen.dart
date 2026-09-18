@@ -69,7 +69,12 @@ class _SshScreenState extends ConsumerState<SshScreen> {
           left: RolePicker(
             roles: ref.watch(sshRolesProvider),
             selected: _role,
-            onSelected: (r) => setState(() => _role = r),
+            onSelected: (r) {
+              if (r == _role) return;
+              // Results of the previous role must not linger on screen.
+              notifier.clear();
+              setState(() => _role = r);
+            },
             onRefresh: () => ref.invalidate(sshRolesProvider),
           ),
           right: Padding(

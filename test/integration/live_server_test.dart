@@ -10,6 +10,7 @@ library;
 
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transikey/core/api/dio_factory.dart';
 import 'package:transikey/core/api/dio_vault_api_client.dart';
@@ -240,6 +241,79 @@ void main() {
       final cert = await client.signPublicKey('sign', _publicKey);
       expect(cert.signedKey, startsWith('ssh-ed25519-cert-v01@openssh.com '));
       expect(cert.serialNumber, isNotEmpty);
+    });
+
+    test('a signed certificate logs in to the dev SSH target', () async {
+      final ssh = await Process.run('which', ['ssh']);
+      if (ssh.exitCode != 0) {
+        markTestSkipped('ssh client not installed');
+        return;
+      }
+      final dir = await Directory.systemTemp.createTemp('transikey-ssh-');
+      addTearDown(() => dir.delete(recursive: true));
+      final keyPath = '${dir.path}/id_ed25519';
+      final keygen = await Process.run('ssh-keygen', [
+        '-q',
+        '-t',
+        'ed25519',
+        '-N',
+        '',
+        '-f',
+        keyPath,
+      ]);
+      expect(keygen.exitCode, 0, reason: keygen.stderr.toString());
+
+      await signInAsUser();
+      final cert = await client.signPublicKey(
+        'sign',
+        await File('$keyPath.pub').readAsString(),
+      );
+      await File('$keyPath-cert.pub').writeAsString('${cert.signedKey}\n');
+
+      final login = await Process.run('ssh', [
+        '-p',
+        env['DEV_SSHD_PORT'] ?? '2222',
+        '-i',
+        keyPath,
+        '-o',
+        'BatchMode=yes',
+        '-o',
+        'StrictHostKeyChecking=no',
+        '-o',
+        'UserKnownHostsFile=/dev/null',
+        '-o',
+        'ConnectTimeout=5',
+        'ubuntu@127.0.0.1',
+        'id -un',
+      ]);
+      expect(login.exitCode, 0, reason: login.stderr.toString());
+      expect(login.stdout.toString().trim(), 'ubuntu');
+    });
+
+    test('an OTP verifies once against the ssh mount', () async {
+      await signInAsUser();
+      final creds = await client.getSshCredentials('otp', ip: '172.30.0.10');
+      holder.clear();
+      // ssh/verify is what vault-ssh-helper calls from PAM; unauthenticated.
+      Future<int> verify() async {
+        final dio = buildVaultDio(
+          config: VaultConnectionConfig(address: address),
+          tokenHolder: TokenHolder(),
+          logger: AppLogger(),
+        );
+        try {
+          final response = await dio.post<dynamic>(
+            '/v1/ssh/verify',
+            data: {'otp': creds.otp},
+          );
+          return response.statusCode ?? 0;
+        } on DioException catch (e) {
+          return e.response?.statusCode ?? 0;
+        }
+      }
+
+      expect(await verify(), 200);
+      expect(await verify(), isNot(200), reason: 'OTP must be single use');
     });
 
     test('a malformed public key is a ValidationException', () async {

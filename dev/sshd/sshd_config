@@ -1,0 +1,14 @@
+# Dev SSH target. Two ways in, both issued by OpenBao:
+#   - certificates signed by the ssh/sign role (TrustedUserCAKeys)
+#   - one-time passwords from the ssh/creds role (PAM + vault-ssh-helper)
+Port 22
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication yes
+ChallengeResponseAuthentication yes
+UsePAM yes
+PubkeyAuthentication yes
+TrustedUserCAKeys /etc/ssh/trusted-user-ca-keys.pem
+AuthorizedKeysFile none
+LogLevel VERBOSE
+Subsystem sftp /usr/lib/openssh/sftp-server

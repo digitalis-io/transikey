@@ -30,7 +30,12 @@ class _DatabaseScreenState extends ConsumerState<DatabaseScreen> {
         left: RolePicker(
           roles: ref.watch(databaseRolesProvider),
           selected: _role,
-          onSelected: (r) => setState(() => _role = r),
+          onSelected: (r) {
+            if (r == _role) return;
+            // Credentials of the previous role must not linger on screen.
+            ref.read(databaseCredentialsProvider.notifier).clear();
+            setState(() => _role = r);
+          },
           onRefresh: () => ref.invalidate(databaseRolesProvider),
         ),
         right: SingleChildScrollView(

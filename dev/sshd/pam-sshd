@@ -1,0 +1,6 @@
+# One-time passwords are verified by OpenBao through vault-ssh-helper.
+# The -dev flag permits plain HTTP to the dev server.
+auth requisite pam_exec.so quiet expose_authtok log=/var/log/vault-ssh-helper.log /usr/local/bin/vault-ssh-helper -config=/etc/vault-ssh-helper.d/config.hcl -dev
+auth optional pam_unix.so not_set_pass use_first_pass nodelay
+account include common-account
+session include common-session
