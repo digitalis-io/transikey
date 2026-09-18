@@ -14,6 +14,7 @@ import './step/i_sign_out.dart';
 import './step/the_servers_and_are_remembered.dart';
 import './step/i_pick_the_server.dart';
 import './step/the_sign_in_form_targets_as.dart';
+import './step/i_import_the_cli_environment.dart';
 
 void main() {
   group('''Authentication''', () {
@@ -77,5 +78,18 @@ void main() {
       await iPickTheServer(tester, 'New server…');
       await theSignInFormTargetsAs(tester, '', '');
     });
+    testWidgets(
+      '''Importing the CLI environment fills in the form without signing in''',
+      (tester) async {
+        await bddSetUp(tester);
+        await iImportTheCliEnvironment(tester);
+        await theSignInFormTargetsAs(
+          tester,
+          'https://bao.cli.example:8200',
+          '',
+        );
+        await iDoNotSeeTheMessage(tester, 'Signed in');
+      },
+    );
   });
 }

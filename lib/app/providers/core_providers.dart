@@ -10,6 +10,7 @@ import '../../core/security/clipboard_guard.dart';
 import '../../core/security/screen_protection.dart';
 import '../../core/security/secret_store.dart';
 import '../../core/utils/app_logger.dart';
+import '../../core/utils/cli_environment.dart';
 import '../../features/settings/domain/app_settings.dart';
 import '../../features/settings/presentation/settings_provider.dart';
 
@@ -23,6 +24,11 @@ final secretStoreProvider = Provider<SecretStore>(
 final browserLauncherProvider = Provider<Future<bool> Function(Uri)>(
   (ref) =>
       (url) => launchUrl(url, mode: LaunchMode.externalApplication),
+);
+
+/// CLI environment (`BAO_ADDR`, `VAULT_ADDR`, `~/.vault-token`, …).
+final cliEnvironmentProvider = Provider<CliEnvironment>(
+  (ref) => CliEnvironment.detect(),
 );
 
 final biometricAuthProvider = Provider<BiometricAuth>(

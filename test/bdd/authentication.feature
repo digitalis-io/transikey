@@ -45,3 +45,8 @@ Feature: Authentication
     And I pick the server {'prod'}
     When I pick the server {'New server…'}
     Then the sign in form targets {''} as {''}
+
+  Scenario: Importing the CLI environment fills in the form without signing in
+    When I import the CLI environment
+    Then the sign in form targets {'https://bao.cli.example:8200'} as {''}
+    And I do not see the message {'Signed in'}

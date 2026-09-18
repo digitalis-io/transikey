@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/providers/core_providers.dart';
 import '../../../core/errors/vault_exception.dart';
+import '../../../core/utils/cli_environment.dart';
 import '../../../core/utils/duration_format.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../leases/presentation/leases_provider.dart';
@@ -35,6 +37,14 @@ class AuthScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _cliImportLabel(CliEnvironment cli) {
+  final parts = [
+    if (cli.addressSource != null) cli.addressSource!,
+    if (cli.tokenSource != null) cli.tokenSource!,
+  ];
+  return 'Import from CLI (${parts.join(' + ')})';
 }
 
 class _LoginForm extends ConsumerStatefulWidget {
@@ -86,6 +96,57 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// Fills the form from the CLI environment. The token goes into the
+  /// masked field only; nothing is stored or sent until Sign in is pressed.
+  Future<void> _importFromCli() async {
+    final cli = ref.read(cliEnvironmentProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final notifier = ref.read(settingsProvider.notifier);
+    final imported = <String>[];
+
+    if (cli.address != null) {
+      final active = ref.read(settingsProvider).value?.activeProfile;
+      if (active != null && active.vaultAddr.trim() != cli.address) {
+        await notifier.detachProfile();
+      }
+      final ca = cli.readCaCert();
+      await notifier.change(
+        (s) => s.copyWith(
+          tlsVerify: !cli.skipVerify,
+          caCertPem: ca ?? s.caCertPem,
+          caCertName: ca == null ? s.caCertName : cli.caCertPath,
+        ),
+      );
+      imported.add('address from ${cli.addressSource}');
+      if (cli.namespace != null) imported.add('namespace');
+      if (ca != null) imported.add('CA certificate');
+      if (cli.skipVerify) imported.add('TLS verification OFF');
+    }
+    final token = cli.readToken();
+    if (token != null) imported.add('token from ${cli.tokenSource}');
+    if (!mounted) return;
+
+    setState(() {
+      if (cli.address != null) {
+        _address.text = cli.address!;
+        _namespace.text = cli.namespace ?? '';
+      }
+      if (token != null) {
+        _method = AuthMethod.token;
+        _token.text = token;
+      }
+    });
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          imported.isEmpty
+              ? 'Nothing to import.'
+              : 'Imported ${imported.join(', ')}. Press Sign in to continue.',
+        ),
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -216,6 +277,15 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
                       final target = profiles.firstWhere((p) => p.id == id);
                       await switchServerProfile(context, ref, target);
                     },
+            ),
+          if (ref.watch(cliEnvironmentProvider).hasAnything)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: login.isLoading ? null : _importFromCli,
+                icon: const Icon(Icons.terminal),
+                label: Text(_cliImportLabel(ref.watch(cliEnvironmentProvider))),
+              ),
             ),
           if (widget.reason != null)
             ErrorBanner(error: VaultException(widget.reason!)),

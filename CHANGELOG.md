@@ -25,6 +25,7 @@ All notable changes to this project will be documented in this file.
 - Connect section on the Database screen: copy-ready `psql` or `mysql` command and connection URI, with remembered host, port and database
 - Connect section on the SSH screen: copy-ready `ssh`, `sshpass` and `CertificateFile` commands, with remembered user, host, port and key path
 - Server profiles: remember several servers with their namespace, TLS settings, mounts, Connect targets, last sign-in method and username; dropdown on the sign-in form, colour tag in the status bar, management under Settings; switching signs out first
+- Import from the CLI environment on the sign-in form: `BAO_*` / `VAULT_*` address, namespace, CA, skip-verify and token, or the `~/.vault-token` file
 - CI job for formatting, analysis and tests; tag-triggered release workflow that packages macOS, Windows and Linux builds with SHA-256 checksums
 - Initial project scaffold bootstrapped from automation/bootstrap
 

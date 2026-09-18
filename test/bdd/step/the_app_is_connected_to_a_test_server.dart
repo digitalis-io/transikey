@@ -9,6 +9,7 @@ import 'package:transikey/core/api/vault_api_client.dart';
 import 'package:transikey/core/errors/vault_exception.dart';
 import 'package:transikey/core/models/auth_response.dart';
 import 'package:transikey/core/security/secret_store.dart';
+import 'package:transikey/core/utils/cli_environment.dart';
 import 'package:transikey/features/auth/presentation/auth_screen.dart';
 import 'package:transikey/features/settings/domain/app_settings.dart';
 
@@ -64,6 +65,14 @@ Future<void> theAppIsConnectedToATestServer(WidgetTester tester) async {
       overrides: [
         apiClientProvider.overrideWithValue(server),
         secretStoreProvider.overrideWithValue(store),
+        // Deterministic: the developer's own shell must not leak in.
+        cliEnvironmentProvider.overrideWithValue(
+          CliEnvironment.from(const {
+            'BAO_ADDR': 'https://bao.cli.example:8200',
+            'BAO_NAMESPACE': 'team-cli',
+            'BAO_TOKEN': 'cli-token',
+          }, fileExists: (_) => false),
+        ),
       ],
       child: const MaterialApp(home: Scaffold(body: AuthScreen())),
     ),

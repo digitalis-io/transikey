@@ -189,6 +189,26 @@ Work with several servers? Save each one as a profile and pick it from the **Ser
 
 Edits made while a profile is active (mounts, Connect targets, TLS) are saved to that profile. Typing a different address on the sign-in form detaches from the profile instead of overwriting it. Theme, lock timeout, clipboard timeout and biometric unlock are global.
 
+### Import from the CLI environment
+
+Already use the `bao` or `vault` CLI? When Transikey finds its settings, the sign-in form shows **Import from CLI**. One click fills in the form; nothing is sent or stored until you press **Sign in**.
+
+| Source | Becomes |
+|--------|---------|
+| `BAO_ADDR`, else `VAULT_ADDR` | Address |
+| `BAO_NAMESPACE`, else `VAULT_NAMESPACE` | Namespace |
+| `BAO_CACERT`, else `VAULT_CACERT` | Custom CA certificate (file is read) |
+| `BAO_SKIP_VERIFY`, else `VAULT_SKIP_VERIFY` | Skip TLS verification |
+| `BAO_TOKEN`, else `VAULT_TOKEN`, else `~/.vault-token` | Token field (masked), method set to Token |
+
+```bash
+export BAO_ADDR=https://bao.example.com:8200
+bao login -method=oidc      # writes ~/.vault-token
+make run                    # or start the app from this shell
+```
+
+An app started from Finder, the Start menu or a desktop launcher does not see variables exported in your shell profile; start it from a terminal for those. The token file is found either way. Save the result as a server profile and you only do this once.
+
 ## Keyboard shortcuts
 
 | Shortcut (`Cmd` on macOS, `Ctrl` elsewhere) | Action |

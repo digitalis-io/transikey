@@ -17,10 +17,11 @@ Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from th
 
 ## Active Tasks
 - PR #1 (`feat/flutter-scaffold` → `main`) open; keep its description in sync with new commits.
-- Profile ideas not built: import from `VAULT_ADDR` / `BAO_ADDR` env, JSON export/import, profile hint in share links, concurrent sessions (deferred on purpose).
+- Profile ideas not built: JSON export/import, profile hint in share links, concurrent sessions (deferred on purpose).
 - Commit `f7c433e` lacks `Signed-off-by` and a Conventional Commit subject; amend before merge if DCO is enforced.
 
 ## Recent Progress
+- 2026-09-18: CLI environment import (`core/utils/cli_environment.dart`, `cliEnvironmentProvider`); token is read only on click and lands in the masked field, never in settings
 - 2026-09-18: Server profiles (`ServerProfile`, dropdown, colour tag, Settings list); sharing screen gated on session
 - 2026-09-18: `v0.1.0-rc1` tagged; release workflow proven on all three platforms
 - 2026-09-18: SSH target in dev stack, role-switch clearing, DB and SSH Connect sections, button label fix, docs review applied
