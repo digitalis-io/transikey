@@ -9,6 +9,8 @@ import '../../../core/utils/duration_format.dart';
 import '../../../core/utils/share_link.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../../core/widgets/secret_field.dart';
+import '../../auth/domain/vault_session.dart';
+import '../../auth/presentation/session_provider.dart';
 import '../../settings/presentation/settings_provider.dart';
 import '../domain/sharing_repository.dart';
 import 'sharing_provider.dart';
@@ -58,7 +60,14 @@ class _SharingScreenState extends ConsumerState<SharingScreen>
   void initState() {
     super.initState();
     // A link that launched the app is already waiting.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeShareLink());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Signed out, Unwrap is the only tab that can do anything.
+      if (ref.read(vaultSessionProvider) is! SessionAuthenticated) {
+        _tabs.index = 1;
+      }
+      _consumeShareLink();
+    });
   }
 
   @override
@@ -133,6 +142,10 @@ class _SharingScreenState extends ConsumerState<SharingScreen>
     final result = ref.watch(secretSharingProvider);
     final notifier = ref.read(secretSharingProvider.notifier);
     final busy = result.isLoading;
+    // Unwrapping needs no session (that is the point of a share link);
+    // wrapping and the cubbyhole belong to a token.
+    final signedIn = ref.watch(vaultSessionProvider) is SessionAuthenticated;
+    final locked = busy || !signedIn;
     ref.listen(pendingShareLinkProvider, (_, link) {
       if (link != null) _consumeShareLink();
     });
@@ -158,6 +171,7 @@ class _SharingScreenState extends ConsumerState<SharingScreen>
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _tab([
+                  if (!signedIn) const _SignInHint('wrap a secret'),
                   TextField(
                     controller: _payload,
                     minLines: 4,
@@ -178,7 +192,7 @@ class _SharingScreenState extends ConsumerState<SharingScreen>
                     ],
                     onChanged: (v) => setState(() => _ttl = v ?? _ttl),
                   ),
-                  _button('Wrap secret', Icons.lock, busy, () async {
+                  _button('Wrap secret', Icons.lock, locked, () async {
                     await notifier.wrap(
                       parseSecretPayload(_payload.text),
                       _ttl,
@@ -218,6 +232,7 @@ class _SharingScreenState extends ConsumerState<SharingScreen>
                   _ResultView(result),
                 ]),
                 _tab([
+                  if (!signedIn) const _SignInHint('use the cubbyhole'),
                   TextField(
                     controller: _cubbyPath,
                     decoration: const InputDecoration(
@@ -238,7 +253,7 @@ class _SharingScreenState extends ConsumerState<SharingScreen>
                     spacing: 8,
                     children: [
                       FilledButton.icon(
-                        onPressed: busy
+                        onPressed: locked
                             ? null
                             : () async {
                                 await notifier.cubbyholeStore(
@@ -252,14 +267,14 @@ class _SharingScreenState extends ConsumerState<SharingScreen>
                         label: const Text('Store'),
                       ),
                       OutlinedButton.icon(
-                        onPressed: busy
+                        onPressed: locked
                             ? null
                             : () => notifier.cubbyholeRetrieve(_cubbyPath.text),
                         icon: const Icon(Icons.download_outlined),
                         label: const Text('Retrieve'),
                       ),
                       OutlinedButton.icon(
-                        onPressed: busy
+                        onPressed: locked
                             ? null
                             : () => notifier.cubbyholeDelete(_cubbyPath.text),
                         icon: const Icon(Icons.delete_outline),
@@ -267,9 +282,10 @@ class _SharingScreenState extends ConsumerState<SharingScreen>
                       ),
                     ],
                   ),
-                  _CubbyholeKeys(
-                    onSelected: (k) => setState(() => _cubbyPath.text = k),
-                  ),
+                  if (signedIn)
+                    _CubbyholeKeys(
+                      onSelected: (k) => setState(() => _cubbyPath.text = k),
+                    ),
                   _ResultView(result),
                 ]),
               ],
@@ -339,6 +355,36 @@ class _ShareActions extends ConsumerWidget {
           label: const Text('Copy CLI command'),
         ),
       ],
+    );
+  }
+}
+
+class _SignInHint extends StatelessWidget {
+  const _SignInHint(this.action);
+
+  final String action;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.lock_outline, color: scheme.onSecondaryContainer),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Sign in to $action. Unwrapping works without signing in.',
+              style: TextStyle(color: scheme.onSecondaryContainer),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

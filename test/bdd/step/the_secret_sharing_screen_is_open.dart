@@ -6,7 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:transikey/app/providers/core_providers.dart';
 import 'package:transikey/core/errors/vault_exception.dart';
+import 'package:transikey/core/models/auth_response.dart';
 import 'package:transikey/core/models/wrapped_secret.dart';
+import 'package:transikey/features/auth/domain/vault_session.dart';
+import 'package:transikey/features/auth/presentation/session_provider.dart';
+import 'package:transikey/features/settings/presentation/settings_provider.dart';
 import 'package:transikey/core/security/secret_store.dart';
 import 'package:transikey/features/settings/domain/app_settings.dart';
 import 'package:transikey/features/sharing/presentation/sharing_screen.dart';
@@ -14,7 +18,10 @@ import 'package:transikey/features/sharing/presentation/sharing_screen.dart';
 import 'sharing_world.dart';
 
 /// Usage: the secret sharing screen is open
-Future<void> theSecretSharingScreenIsOpen(WidgetTester tester) async {
+Future<void> theSecretSharingScreenIsOpen(
+  WidgetTester tester, {
+  bool signedIn = true,
+}) async {
   tester.view.physicalSize = const Size(1200, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -36,7 +43,12 @@ Future<void> theSecretSharingScreenIsOpen(WidgetTester tester) async {
   final store = InMemorySecretStore();
   await store.write(
     'transikey.settings',
-    jsonEncode(const AppSettings(vaultAddr: 'https://bao.test:8200').toJson()),
+    jsonEncode(
+      const AppSettings(
+        vaultAddr: 'https://bao.test:8200',
+        inactivityTimeoutSeconds: 0,
+      ).toJson(),
+    ),
   );
 
   final container = ProviderContainer(
@@ -49,6 +61,23 @@ Future<void> theSecretSharingScreenIsOpen(WidgetTester tester) async {
   addTearDown(container.dispose);
   SharingWorld.server = server;
   SharingWorld.container = container;
+
+  if (signedIn) {
+    await container.read(settingsProvider.future);
+    await container
+        .read(vaultSessionProvider.notifier)
+        .establish(
+          const AuthResponse(
+            clientToken: 'test-token',
+            accessor: 'test-accessor',
+            policies: ['transikey'],
+            leaseDuration: Duration.zero, // Never expires: no pending timers.
+            renewable: false,
+            displayName: 'demo',
+          ),
+          AuthMethod.userpass,
+        );
+  }
 
   await tester.pumpWidget(
     UncontrolledProviderScope(

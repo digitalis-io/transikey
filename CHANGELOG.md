@@ -37,3 +37,4 @@ All notable changes to this project will be documented in this file.
 - A key released while a dialog or the browser had focus stayed "pressed" and blocked typing; keyboard state resyncs on window focus
 - Results of a request could appear under another tab after switching tabs
 - Locking the session no longer loses the current screen
+- Secret Sharing offered Wrap and Cubbyhole while signed out and failed with "permission denied"; those actions are now disabled with a sign-in hint, and the screen opens on Unwrap, which needs no session
