@@ -38,6 +38,19 @@ OIDC needs a real identity provider, so the dev stack does not cover it. The OID
 
 Run `make help` for every task.
 
+## Terms
+
+| Term | Meaning |
+|------|---------|
+| Dynamic credentials | A database user created on request that the server deletes when its lease ends |
+| Lease | The lifetime of an issued credential; it can be renewed or revoked early |
+| OTP | One-time SSH password, valid for a single login to one target IP |
+| Signed key | Your SSH public key turned into a short-lived certificate by the server's CA |
+| Response wrapping | The server stores a secret and hands back a single-use token that reveals it once |
+| Cubbyhole | A private store tied to one token; it disappears with that token |
+| AppRole | Machine login with a role ID and a secret ID |
+| Namespace | An isolated tenant inside Vault Enterprise or OpenBao |
+
 ## Usage examples
 
 ### 1. Get temporary database credentials
@@ -47,11 +60,13 @@ Run `make help` for every task.
 3. Reveal or copy the username and password. The clipboard clears after 30 seconds.
 4. Watch the lease count down: green (active), yellow (expiring soon), red (expired). **Renew** or **Revoke** from the same card or from **Lease Management**.
 
-Check the credentials against the dev database:
+5. Use the **Connect** section of the card: choose PostgreSQL or MySQL, set host, port and database (remembered for next time), then copy the ready-made command or the connection URI:
 
-```bash
-PGPASSWORD='<password>' psql -h 127.0.0.1 -U '<username>' -d app -c 'select current_user'
-```
+   ```bash
+   PGPASSWORD='<password>' psql -h '127.0.0.1' -p 5432 -U '<username>' -d 'app'
+   ```
+
+   The password travels in an environment variable, not as an argument, so it does not show up in `ps`. Picking another role clears the card, so credentials of one role never sit next to another.
 
 ### 2. Hand a secret to a colleague, once
 
@@ -83,19 +98,28 @@ Signed key:
 
 1. Open **SSH Access** (`Cmd/Ctrl+3`), choose the `sign` role, tab **Sign public key**.
 2. **Upload public key** (for example `~/.ssh/id_ed25519.pub`), then **Sign key**.
-3. **Download certificate** and save it next to the key as `~/.ssh/id_ed25519-cert.pub`. `ssh` picks it up automatically:
+3. **Download certificate** and save it next to the key as `~/.ssh/id_ed25519-cert.pub`.
+4. Copy the command from the **Connect** section (user, host, port and private key path are remembered; uploading `id_ed25519.pub` fills in the key path):
 
    ```bash
-   ssh -p 2222 -i ~/.ssh/id_ed25519 ubuntu@127.0.0.1
+   ssh -p 2222 -i '~/.ssh/id_ed25519' -o CertificateFile='/Users/me/.ssh/id_ed25519-cert.pub' 'ubuntu@127.0.0.1'
    ```
+
+   The dev `sign` role issues 30 minute certificates with a terminal (`permit-pty`).
 
 One-time password:
 
 1. Choose the `otp` role, tab **One-time password**, target IP `172.30.0.10` (the OTP is bound to the IP of the server it is meant for), then **Generate OTP**.
-2. Connect and paste the OTP at the password prompt. It works exactly once:
+2. Copy a command from the **Connect** section and paste the OTP at the password prompt. It works exactly once:
 
    ```bash
-   ssh -p 2222 -o PreferredAuthentications=keyboard-interactive ubuntu@127.0.0.1
+   ssh -p 2222 -o PreferredAuthentications=keyboard-interactive -o PubkeyAuthentication=no 'ubuntu@127.0.0.1'
+   ```
+
+   With `sshpass` installed, the second command logs in without a prompt:
+
+   ```bash
+   SSHPASS='<otp>' sshpass -e ssh -p 2222 -o PreferredAuthentications=keyboard-interactive -o PubkeyAuthentication=no 'ubuntu@127.0.0.1'
    ```
 
 ## Configuration reference
@@ -119,6 +143,16 @@ All settings live in **Settings** (`Cmd/Ctrl+,`) and are stored in the OS keysto
 | AppRole mount | path | `approle` | `approle-ci` |
 | LDAP mount | path | `ldap` | `ldap-corp` |
 | OIDC mount | path | `oidc` | `okta` |
+| Database client (Connect section) | `psql` / `mysql` | `psql` | `mysql` |
+| Database host | string | `127.0.0.1` | `pg.internal.example.com` |
+| Database port | integer | `5432` | `3306` |
+| Database name | string | `app` | `orders` |
+| SSH user (Connect section) | string | `ubuntu` | `ops` |
+| SSH host | string | `127.0.0.1` | `bastion.example.com` |
+| SSH port | integer | `2222` | `22` |
+| SSH private key path | path | `~/.ssh/id_ed25519` | `~/.ssh/work_ed25519` |
+
+The Database and SSH rows are edited in the **Connect** section of their screens, not under Settings; the defaults match the dev stack.
 
 Dev stack environment variables. Set them in the shell before `make dev-up`:
 
@@ -141,7 +175,7 @@ The dev stack is for local testing only: dev mode keeps data in memory, uses a f
 
 | Shortcut (`Cmd` on macOS, `Ctrl` elsewhere) | Action |
 |----------|--------|
-| `+1` … `+6` | Jump to a sidebar section |
+| `+1` … `+6` | Authentication, Database Credentials, SSH Access, Secret Sharing, Lease Management, Settings |
 | `+B` | Collapse or expand the sidebar |
 | `+L` | Lock the session |
 | `+,` | Settings |
