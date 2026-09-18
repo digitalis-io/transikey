@@ -16,16 +16,12 @@ Scaffolded with `--type other`: no stack-specific bootstrap plugin exists for Fl
 Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from the `claude-skills` marketplace) and are **not** repeated here: terse communication, KnowledgeRelay/RAG sourcing for AxonOps/Digitalis/customer questions, secrets management, signed + DCO commits with brand-based identity, branding, README requirements, `CHANGELOG.md`, and the NEVER-DO list. This file covers only what is specific to `--type other` repos.
 
 ## Active Tasks
-- **Commit pending work** on `feat/flutter-scaffold` (PR #1 open, CI green at `76ba997`). Working tree holds four uncommitted changes, to land as separate signed commits:
-  1. `feat(dev)`: SSH target container (`dev/sshd/`), fixed subnet, `permit-pty` on the sign role, live SSH tests
-  2. `fix(ui)`: clear credentials when the selected role changes (DB + SSH), BDD `database_credentials.feature`
-  3. `feat(database)`: Connect section (psql / mysql command + URI), `db_connect_command.dart`
-  4. `feat(ssh)`: Connect section (ssh / sshpass / CertificateFile commands), `ssh_connect_command.dart`; action buttons keep their label and show a pick-a-role hint
-- Then push and update PR #1 description.
+- PR #1 (`feat/flutter-scaffold` → `main`) open; keep its description in sync with new commits.
 - First release tag not cut yet: `release.yml` is unproven until then.
+- Commit `f7c433e` lacks `Signed-off-by` and a Conventional Commit subject; amend before merge if DCO is enforced.
 
 ## Recent Progress
-- 2026-09-18: (uncommitted) SSH target in dev stack, role-switch clearing, DB and SSH Connect sections, button label fix
+- 2026-09-18: SSH target in dev stack, role-switch clearing, DB and SSH Connect sections, button label fix, docs review applied
 - 2026-09-17: PR #1 opened; CI fixed (global gitignore hid `data/` dirs and `runner.exe.manifest`; fake PEM tripped detect-private-key)
 - 2026-09-17: Keyboard resync on window focus (stuck key after dialog/browser steals focus); sign-out no longer revokes a user-supplied token
 - Initial scaffold from `transikey`
