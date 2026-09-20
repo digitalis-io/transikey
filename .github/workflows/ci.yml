@@ -44,3 +44,55 @@ jobs:
       - run: flutter analyze
       - name: Unit and BDD tests
         run: flutter test --exclude-tags integration
+
+  homebrew-cask:
+    name: Homebrew cask
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage the cask in a local tap
+        run: |
+          set -euo pipefail
+          tap="$(brew --repository)/Library/Taps/digitalis-io/homebrew-tap"
+          mkdir -p "${tap}/Casks"
+          cp packaging/homebrew/transikey.rb "${tap}/Casks/transikey.rb"
+          git -C "${tap}" init -q
+          git -C "${tap}" add -A
+          git -C "${tap}" -c user.name=ci -c user.email=ci@local commit -qm cask
+
+      - name: Style and audit
+        run: |
+          set -euo pipefail
+          tap="$(brew --repository)/Library/Taps/digitalis-io/homebrew-tap"
+          brew style "${tap}/Casks/transikey.rb"
+          # github_prerelease_version is excluded on purpose: the cask follows
+          # every tag and only release candidates exist so far. Drop the
+          # exception once a stable version is released.
+          brew audit --cask --strict --online \
+            --except=github_prerelease_version digitalis-io/tap/transikey
+
+      - name: Install, verify, uninstall
+        run: |
+          set -euo pipefail
+          brew install --cask digitalis-io/tap/transikey
+          test -d /Applications/transikey.app
+          test -x /Applications/transikey.app/Contents/MacOS/transikey
+          # The runner has no GUI session, so the app is never launched here;
+          # the first launch through Gatekeeper is a manual check.
+          brew uninstall --cask --zap digitalis-io/tap/transikey
+          test ! -e /Applications/transikey.app
+          test ! -e "${HOME}/Library/Preferences/io.digitalis.transikey.plist"
+
+      - name: A wrong checksum must fail the install
+        run: |
+          set -euo pipefail
+          tap="$(brew --repository)/Library/Taps/digitalis-io/homebrew-tap"
+          sed -E 's|^  sha256 ".*"$|  sha256 "0000000000000000000000000000000000000000000000000000000000000000"|' \
+            packaging/homebrew/transikey.rb > "${tap}/Casks/transikey.rb"
+          if brew install --cask digitalis-io/tap/transikey; then
+            brew uninstall --cask digitalis-io/tap/transikey || true
+            echo "install succeeded with a wrong checksum"
+            exit 1
+          fi

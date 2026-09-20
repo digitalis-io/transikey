@@ -139,3 +139,77 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+  homebrew:
+    name: Update Homebrew cask
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Tap token present?
+        id: guard
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -n "$TAP_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::HOMEBREW_TAP_TOKEN is not set; the cask was not updated."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.enabled == 'true'
+
+      - name: Checkout tap
+        if: steps.guard.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: digitalis-io/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Render cask
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          asset="transikey-${TAG}-macos-universal.zip"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+
+          # The checksum comes from the published release, never from a local
+          # build, so the cask can only ever describe the artefact users get.
+          curl -fsSL "${base}/SHA256SUMS.txt" -o SHA256SUMS.txt
+          sha="$(awk -v a="$asset" '$2 == a {print $1}' SHA256SUMS.txt)"
+          [ -n "$sha" ] || { echo "no checksum for ${asset}"; exit 1; }
+
+          curl -fsSL "${base}/${asset}" -o "$asset"
+          echo "${sha}  ${asset}" | sha256sum -c -
+
+          mkdir -p tap/Casks
+          sed -E \
+            -e "s|^  version \".*\"$|  version \"${version}\"|" \
+            -e "s|^  sha256 \".*\"$|  sha256 \"${sha}\"|" \
+            packaging/homebrew/transikey.rb > tap/Casks/transikey.rb
+
+          grep -q "version \"${version}\"" tap/Casks/transikey.rb
+          grep -q "sha256 \"${sha}\"" tap/Casks/transikey.rb
+
+      - name: Commit and push
+        if: steps.guard.outputs.enabled == 'true'
+        working-directory: tap
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git add Casks/transikey.rb
+          if git diff --cached --quiet -- Casks/transikey.rb; then
+            echo "cask already up to date"
+            exit 0
+          fi
+          git config user.name "Digitalis Release"
+          git config user.email "releases@digitalis.io"
+          git commit -m "chore(transikey): ${TAG}"
+          git push
