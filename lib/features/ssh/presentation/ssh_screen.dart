@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers/clipboard_actions.dart';
 import '../../../core/utils/duration_format.dart';
+import '../../../core/utils/home_paths.dart';
 import '../../../core/utils/ssh_connect_command.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../../core/widgets/resizable_split.dart';
@@ -41,7 +42,11 @@ class _SshScreenState extends ConsumerState<SshScreen> {
   }
 
   Future<void> _loadPublicKey() async {
-    final picked = await FilePicker.pickFiles(dialogTitle: 'Select public key');
+    // Native dialogs hide dotfiles, so start inside ~/.ssh when it exists.
+    final picked = await FilePicker.pickFiles(
+      dialogTitle: 'Select public key',
+      initialDirectory: existingSshDirectory(),
+    );
     final path = picked?.files.single.path;
     if (path == null) return;
     final content = await File(path).readAsString();
@@ -259,6 +264,8 @@ class _ResultView extends ConsumerWidget {
     final path = await FilePicker.saveFile(
       dialogTitle: 'Save signed certificate',
       fileName: '$keyName-cert.pub',
+      // Save beside the private key; ~/.ssh is hidden in native dialogs.
+      initialDirectory: parentDirectoryOf(keyPath) ?? existingSshDirectory(),
     );
     if (path == null) return;
     await File(path).writeAsString('$certificate\n');

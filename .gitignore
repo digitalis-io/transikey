@@ -42,3 +42,7 @@ windows/flutter/generated_plugins.cmake
 
 # Local Claude Code overrides
 .claude/settings.local.json
+android/
+ios/
+test/widget_test.dart
+web/
