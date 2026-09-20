@@ -15,11 +15,11 @@ Desktop client for [OpenBao](https://openbao.org) and HashiCorp Vault: sign in, 
 One Flutter codebase for macOS 13+, Windows 11+ and Linux (Ubuntu 22.04+). Built and tested on macOS so far; Windows and Linux are scaffolded but untested. Works with Vault OSS, Vault Enterprise (namespaces) and OpenBao, which share the same HTTP API.
 
 <p align="center">
-  <a href="https://youtube.com/shorts/Uexpcycy44s">
+  <a href="https://youtu.be/l6h9bdtxv9M">
     <img src="assets/docs/demo-video.jpg" alt="Transikey demo video: SSH one-time password, database credentials and the psql connect command" width="640">
   </a>
   <br>
-  <a href="https://youtube.com/shorts/Uexpcycy44s">▶ Watch the short demo on YouTube</a>
+  <a href="https://youtube.com/shorts/l6h9bdtxv9M">▶ Watch the short demo on YouTube</a>
 </p>
 
 ## Quick start
