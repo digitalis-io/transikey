@@ -146,28 +146,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Tap token present?
+      - name: Tap key present?
         id: guard
         env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          BREW_SSH_KEY: ${{ secrets.BREW_SSH_KEY }}
         run: |
-          if [ -n "$TAP_TOKEN" ]; then
+          if [ -n "$BREW_SSH_KEY" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::HOMEBREW_TAP_TOKEN is not set; the cask was not updated."
+            echo "::warning::BREW_SSH_KEY is not set; the cask was not updated."
           fi
 
       - uses: actions/checkout@v4
         if: steps.guard.outputs.enabled == 'true'
 
-      - name: Checkout tap
+      - name: Set up the deploy key
         if: steps.guard.outputs.enabled == 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: digitalis-io/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: tap
+        env:
+          BREW_SSH_KEY: ${{ secrets.BREW_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # The secret holds the base64 of the private key, so the PEM newlines
+          # survive the round trip through the secret store.
+          printf '%s' "$BREW_SSH_KEY" | base64 -d > ~/.ssh/tap_key
+          chmod 600 ~/.ssh/tap_key
+          ssh-keygen -y -f ~/.ssh/tap_key > /dev/null   # fail early on a mangled key
+          # Host keys come from GitHub's own API over HTTPS, not from keyscan.
+          curl -fsSL https://api.github.com/meta \
+            | jq -r '.ssh_keys[] | "github.com \(.)"' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          echo "GIT_SSH_COMMAND=ssh -i ~/.ssh/tap_key -o IdentitiesOnly=yes -o UserKnownHostsFile=~/.ssh/known_hosts" >> "$GITHUB_ENV"
+
+      - name: Clone tap
+        if: steps.guard.outputs.enabled == 'true'
+        run: git clone --depth 1 git@github.com:digitalis-io/homebrew-tap.git tap
 
       - name: Render cask
         if: steps.guard.outputs.enabled == 'true'
@@ -212,4 +227,8 @@ jobs:
           git config user.name "Digitalis Release"
           git config user.email "releases@digitalis.io"
           git commit -m "chore(transikey): ${TAG}"
-          git push
+          git push origin HEAD:main
+
+      - name: Remove the deploy key
+        if: always()
+        run: rm -f ~/.ssh/tap_key
