@@ -49,6 +49,10 @@ jobs:
     name: Homebrew cask
     runs-on: macos-14
     timeout-minutes: 25
+    env:
+      # brew audit --online queries the GitHub API. Unauthenticated runners
+      # share an IP and hit the 60 requests per hour limit.
+      HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
