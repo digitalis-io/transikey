@@ -338,7 +338,7 @@ git tag -s v0.1.0 -m "v0.1.0" && git push origin v0.1.0
 | Windows | `transikey-v0.1.0-windows-x64.zip` |
 | Linux | `transikey-v0.1.0-linux-x64.tar.gz` |
 
-`SHA256SUMS.txt` ships with every release. The publish job then renders `packaging/homebrew/transikey.rb` with the new version and the checksum of the macOS zip and pushes it to `digitalis-io/homebrew-tap` as `Casks/transikey.rb`, so `brew upgrade --cask transikey` picks the release up. That step needs the `HOMEBREW_TAP_TOKEN` secret (a token with write access to the tap); without it the job warns and the release still succeeds. Packages are unsigned for now: macOS Gatekeeper and Windows SmartScreen will warn on first start. A tag with a suffix (`v0.2.0-rc1`) is published as a pre-release.
+`SHA256SUMS.txt` ships with every release. The publish job then renders `packaging/homebrew/transikey.rb` with the new version and the checksum of the macOS zip and pushes it to `digitalis-io/homebrew-tap` as `Casks/transikey.rb`, so `brew upgrade --cask transikey` picks the release up. That step needs the `BREW_SSH_KEY` secret: the base64 of a private SSH key whose public half is a deploy key with write access on the tap. Without the secret the job warns and the release still succeeds. Packages are unsigned for now: macOS Gatekeeper and Windows SmartScreen will warn on first start. A tag with a suffix (`v0.2.0-rc1`) is published as a pre-release.
 
 Regenerate the app icons after a logo change with `python3 tool/make_icons.py` (needs `pillow` and `numpy`).
 
