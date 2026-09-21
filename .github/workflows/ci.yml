@@ -67,11 +67,17 @@ jobs:
           set -euo pipefail
           tap="$(brew --repository)/Library/Taps/digitalis-io/homebrew-tap"
           brew style "${tap}/Casks/transikey.rb"
-          # github_prerelease_version is excluded on purpose: the cask follows
-          # every tag and only release candidates exist so far. Drop the
-          # exception once a stable version is released.
+          # Two audits are excluded on purpose:
+          #   github_prerelease_version - the cask follows every tag and only
+          #     release candidates exist so far; drop this once a stable
+          #     version is released.
+          #   livecheck_version - this file is the template the release
+          #     workflow renders, so between two releases it names the
+          #     previous version by design. The copy in the tap is the one
+          #     that has to match the newest release.
           brew audit --cask --strict --online \
-            --except=github_prerelease_version digitalis-io/tap/transikey
+            --except=github_prerelease_version,livecheck_version \
+            digitalis-io/tap/transikey
 
       - name: Install, verify, uninstall
         run: |
