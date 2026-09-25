@@ -66,6 +66,10 @@ abstract class ServerProfile with _$ServerProfile {
 
     /// Kubernetes API servers keyed by mount.
     @Default({}) Map<String, SavedKubeTarget> kubernetesTargets,
+
+    /// Namespaces used with each Kubernetes role, keyed `mount/role`, most
+    /// recent first. Names only; offered again when the role cannot tell.
+    @Default({}) Map<String, List<String>> kubernetesRecentNamespaces,
     @Default('ubuntu') String sshUser,
     @Default('127.0.0.1') String sshHost,
     @Default(2222) int sshPort,

@@ -14,9 +14,10 @@ Future<void> aServerThatOffersKubernetesRoles(WidgetTester tester) async {
   KubernetesWorld.lastNamespace = null;
   KubernetesWorld.mounts = {'kubernetes': 'kubernetes', 'ssh': 'ssh'};
   when(server.listSecretMounts).thenAnswer((_) async => KubernetesWorld.mounts);
+  KubernetesWorld.roles = ['developer', 'viewer'];
   when(
     () => server.listKubernetesRoles('kubernetes'),
-  ).thenAnswer((_) async => const ['developer', 'viewer']);
+  ).thenAnswer((_) async => KubernetesWorld.roles);
   when(
     () => server.describeKubernetesRole(any(), any()),
   ).thenThrow(const PermissionDeniedException('Permission denied.'));

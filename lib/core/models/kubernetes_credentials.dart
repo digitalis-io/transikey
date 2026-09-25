@@ -34,6 +34,7 @@ class KubernetesRoleInfo {
   const KubernetesRoleInfo({
     this.allowedNamespaces = const [],
     this.roleType = '',
+    this.namespaceSelector = '',
   });
 
   /// `allowed_kubernetes_namespaces`. May contain `*`.
@@ -41,6 +42,11 @@ class KubernetesRoleInfo {
 
   /// `kubernetes_role_type`: `Role` or `ClusterRole`.
   final String roleType;
+
+  /// `allowed_kubernetes_namespace_selector`: a label selector as JSON or
+  /// YAML. Namespaces carrying those labels are allowed too. Only the
+  /// cluster knows which they are.
+  final String namespaceSelector;
 
   /// Allowed namespaces the user can pick from: named ones, no wildcard.
   List<String> get namespaceChoices => [

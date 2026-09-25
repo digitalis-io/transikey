@@ -145,6 +145,7 @@ void main() {
       expect(server.sent.single.path, '/v1/kubernetes/roles/viewer');
       expect(info.allowedNamespaces, ['*', 'team-a']);
       expect(info.roleType, 'ClusterRole');
+      expect(info.namespaceSelector, isEmpty);
       expect(info.suggestedNamespace, 'team-a');
     });
 
@@ -164,6 +165,18 @@ void main() {
         expect(info.suggestedNamespace, 'team-a');
       },
     );
+
+    test('reads the namespace label selector', () async {
+      answer({
+        'data': {
+          'allowed_kubernetes_namespace_selector':
+              '{"matchLabels":{"team":"payments"}}',
+        },
+      });
+      final info = await client.describeKubernetesRole('kubernetes', 'pay');
+      expect(info.namespaceSelector, '{"matchLabels":{"team":"payments"}}');
+      expect(info.namespaceChoices, isEmpty);
+    });
 
     test('a wildcard alone suggests no namespace', () async {
       answer({

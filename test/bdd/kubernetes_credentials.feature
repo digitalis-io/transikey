@@ -47,6 +47,36 @@ Feature: Kubernetes credentials
     When I pick the role {'developer'}
     Then I see the text {'team-a'}
 
+  Scenario: The namespaces offered narrow down as I type
+    Given the Kubernetes access screen is open
+    And I pick the role {'developer'}
+    When I enter the namespace {'b'}
+    Then the namespaces offered are {'team-b'}
+
+  Scenario: A namespace used before is filled in when the role cannot tell
+    Given the Kubernetes access screen is open
+    And I pick the role {'viewer'}
+    And I enter the namespace {'team-z'}
+    And I request a Kubernetes token
+    And I pick the role {'developer'}
+    When I pick the role {'viewer'}
+    Then I see the text {'team-z'}
+    And the namespace {'team-z'} is offered as used before
+
+  Scenario: A namespace the server refused is not remembered
+    Given the Kubernetes access screen is open
+    And I pick the role {'developer'}
+    And I enter the namespace {'default'}
+    And I request a Kubernetes token
+    When I enter the namespace {''}
+    Then the namespaces offered are {'team-a, team-b'}
+
+  Scenario: A role that allows namespaces by label says so
+    Given the Kubernetes role {'payments'} allows namespaces labelled {'team=payments'}
+    And the Kubernetes access screen is open
+    When I pick the role {'payments'}
+    Then I see the text {'Namespaces labelled team=payments'}
+
   Scenario: The namespace is typed when the role cannot be read
     Given the Kubernetes access screen is open
     When I pick the role {'viewer'}

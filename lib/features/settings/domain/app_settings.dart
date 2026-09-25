@@ -43,6 +43,10 @@ abstract class AppSettings with _$AppSettings {
 
     /// Kubernetes API servers keyed by mount.
     @Default({}) Map<String, SavedKubeTarget> kubernetesTargets,
+
+    /// Namespaces used with each Kubernetes role, keyed `mount/role`, most
+    /// recent first. Names only; offered again when the role cannot tell.
+    @Default({}) Map<String, List<String>> kubernetesRecentNamespaces,
     @Default('ubuntu') String sshUser,
     @Default('127.0.0.1') String sshHost,
     @Default(2222) int sshPort,
@@ -91,6 +95,7 @@ abstract class AppSettings with _$AppSettings {
     databaseName: databaseName,
     databaseTargets: databaseTargets,
     kubernetesTargets: kubernetesTargets,
+    kubernetesRecentNamespaces: kubernetesRecentNamespaces,
     sshUser: sshUser,
     sshHost: sshHost,
     sshPort: sshPort,
@@ -120,6 +125,7 @@ abstract class AppSettings with _$AppSettings {
     databaseName: p.databaseName,
     databaseTargets: p.databaseTargets,
     kubernetesTargets: p.kubernetesTargets,
+    kubernetesRecentNamespaces: p.kubernetesRecentNamespaces,
     sshUser: p.sshUser,
     sshHost: p.sshHost,
     sshPort: p.sshPort,
@@ -127,6 +133,27 @@ abstract class AppSettings with _$AppSettings {
     lastAuthMethod: p.lastAuthMethod,
     lastUsername: p.lastUsername,
   );
+
+  /// How many namespaces are remembered per Kubernetes role.
+  static const recentNamespaceLimit = 10;
+
+  /// Remembers [namespace] as the most recent one used with [roleKey].
+  AppSettings withRecentNamespace(String roleKey, String namespace) {
+    final clean = namespace.trim();
+    if (clean.isEmpty) return this;
+    final previous = kubernetesRecentNamespaces[roleKey] ?? const [];
+    final updated = [
+      clean,
+      for (final n in previous)
+        if (n != clean) n,
+    ].take(recentNamespaceLimit).toList();
+    return copyWith(
+      kubernetesRecentNamespaces: {
+        ...kubernetesRecentNamespaces,
+        roleKey: updated,
+      },
+    );
+  }
 
   /// Writes the current server scoped fields back into the active profile.
   AppSettings syncActiveProfile() {

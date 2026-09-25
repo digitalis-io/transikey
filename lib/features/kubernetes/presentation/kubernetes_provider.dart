@@ -104,6 +104,13 @@ class KubernetesCredentialsNotifier
             clusterRoleBinding: request.clusterRoleBinding,
           );
       ref.read(leasesProvider.notifier).track(creds.lease, creds.key);
+      // Only a namespace the server accepted is worth offering again. A
+      // failed save costs the suggestion, not the token already issued.
+      try {
+        await ref
+            .read(settingsProvider.notifier)
+            .change((s) => s.withRecentNamespace(creds.key, request.namespace));
+      } catch (_) {}
       return creds;
     });
     if (ref.mounted && generation == _generation) state = result;

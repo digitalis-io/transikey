@@ -258,6 +258,8 @@ class DioVaultApiClient implements VaultApiClient {
           ? [for (final n in allowed) '$n']
           : const [],
       roleType: '${data['kubernetes_role_type'] ?? ''}',
+      namespaceSelector:
+          '${data['allowed_kubernetes_namespace_selector'] ?? ''}'.trim(),
     );
   });
 

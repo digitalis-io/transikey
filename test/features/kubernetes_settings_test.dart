@@ -50,6 +50,55 @@ void main() {
     expect(restored.kubernetesTargets, isEmpty);
   });
 
+  group('recent namespaces', () {
+    test('the latest comes first and is not listed twice', () {
+      final s = const AppSettings()
+          .withRecentNamespace('kubernetes/dev', 'team-a')
+          .withRecentNamespace('kubernetes/dev', 'team-b')
+          .withRecentNamespace('kubernetes/dev', ' team-a ');
+      expect(s.kubernetesRecentNamespaces['kubernetes/dev'], [
+        'team-a',
+        'team-b',
+      ]);
+    });
+
+    test('are kept per role', () {
+      final s = const AppSettings()
+          .withRecentNamespace('kubernetes/dev', 'team-a')
+          .withRecentNamespace('k8s-prod/dev', 'prod');
+      expect(s.kubernetesRecentNamespaces['kubernetes/dev'], ['team-a']);
+      expect(s.kubernetesRecentNamespaces['k8s-prod/dev'], ['prod']);
+    });
+
+    test('stop at the limit, dropping the oldest', () {
+      var s = const AppSettings();
+      for (var i = 0; i < AppSettings.recentNamespaceLimit + 2; i++) {
+        s = s.withRecentNamespace('kubernetes/dev', 'ns-$i');
+      }
+      final recent = s.kubernetesRecentNamespaces['kubernetes/dev']!;
+      expect(recent, hasLength(AppSettings.recentNamespaceLimit));
+      expect(recent.first, 'ns-${AppSettings.recentNamespaceLimit + 1}');
+      expect(recent, isNot(contains('ns-0')));
+    });
+
+    test('a blank namespace is ignored', () {
+      final s = const AppSettings().withRecentNamespace('kubernetes/dev', ' ');
+      expect(s.kubernetesRecentNamespaces, isEmpty);
+    });
+
+    test('belong to the server profile', () {
+      final s = const AppSettings().withRecentNamespace('kubernetes/dev', 'a');
+      final profile = s.toProfile(id: 'p', name: 'P');
+      expect(profile.kubernetesRecentNamespaces['kubernetes/dev'], ['a']);
+      expect(
+        const AppSettings()
+            .withProfile(profile)
+            .kubernetesRecentNamespaces['kubernetes/dev'],
+        ['a'],
+      );
+    });
+  });
+
   group('fallback mounts', () {
     test('are read from a comma separated list', () {
       const settings = AppSettings(kubernetesMount: ' /k8s/, prod ,,k8s');

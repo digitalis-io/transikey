@@ -17,6 +17,9 @@ class KubernetesWorld {
   static late FakeKubernetesServer server;
   static late RecordingClipboard clipboard;
 
+  /// Roles of the `kubernetes` mount.
+  static late List<String> roles;
+
   /// Mount path -> engine type, as the server reveals them.
   static late Map<String, String> mounts;
 

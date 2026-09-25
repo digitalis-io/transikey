@@ -5,8 +5,11 @@ import '../../../core/models/kubernetes_credentials.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../../core/widgets/resizable_split.dart';
 import '../../../core/widgets/role_picker.dart';
+import '../../settings/domain/app_settings.dart';
+import '../../settings/presentation/settings_provider.dart';
 import 'kubernetes_credentials_card.dart';
 import 'kubernetes_provider.dart';
+import 'namespace_field.dart';
 
 class KubernetesScreen extends ConsumerStatefulWidget {
   const KubernetesScreen({super.key});
@@ -17,6 +20,7 @@ class KubernetesScreen extends ConsumerStatefulWidget {
 
 class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
   final _namespace = TextEditingController();
+  final _namespaceFocus = FocusNode();
   final _ttl = TextEditingController();
   KubernetesRoleRef? _selected;
   bool _clusterRoleBinding = false;
@@ -30,8 +34,16 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
   ProviderSubscription<AsyncValue<KubernetesRoleInfo?>>? _roleInfo;
 
   @override
+  void initState() {
+    super.initState();
+    // A pick from the list changes the text without an onChanged call.
+    _namespace.addListener(() => setState(() {}));
+  }
+
+  @override
   void dispose() {
     _roleInfo?.close();
+    _namespaceFocus.dispose();
     _namespace.dispose();
     _ttl.dispose();
     super.dispose();
@@ -45,6 +57,8 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
     if (_namespace.text == _suggested) _namespace.clear();
     _suggested = null;
     setState(() => _selected = picked);
+    // Known right away, also when the role cannot be read.
+    _suggest(null);
     _roleInfo?.close();
     _roleInfo = ref.listenManual(
       kubernetesRoleInfoProvider(picked),
@@ -53,8 +67,16 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
     );
   }
 
+  List<String> _recent(KubernetesRoleRef? role) => role == null
+      ? const []
+      : (ref.read(settingsProvider).value ?? const AppSettings())
+                .kubernetesRecentNamespaces['${role.mount}/${role.role}'] ??
+            const [];
+
+  /// The last namespace used with the role, else the first it allows.
   void _suggest(KubernetesRoleInfo? info) {
-    final namespace = info?.suggestedNamespace;
+    final namespace =
+        _recent(_selected).firstOrNull ?? info?.suggestedNamespace;
     if (namespace == null || _namespace.text.isNotEmpty) return;
     _namespace.text = namespace;
     _suggested = namespace;
@@ -70,6 +92,11 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
         : ref.watch(kubernetesRoleInfoProvider(selected));
     final allowed = info?.value?.allowedNamespaces ?? const [];
     final choices = info?.value?.namespaceChoices ?? const <String>[];
+    // Watched so a namespace used a moment ago shows up in the list.
+    ref.watch(
+      settingsProvider.select((s) => s.value?.kubernetesRecentNamespaces),
+    );
+    final recent = _recent(selected);
     final severalMounts = (groups.value?.length ?? 0) > 1;
     final label = selected == null
         ? null
@@ -104,15 +131,16 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
                 children: [
                   SizedBox(
                     width: 260,
-                    child: TextField(
+                    child: NamespaceField(
                       controller: _namespace,
-                      decoration: InputDecoration(
-                        labelText: 'Namespace',
-                        helperText: allowed.isEmpty
-                            ? null
-                            : 'Allowed: ${allowed.join(', ')}',
+                      focusNode: _namespaceFocus,
+                      recent: recent,
+                      allowed: choices,
+                      helperText: namespaceHelp(
+                        allowed: allowed,
+                        choices: choices,
+                        selector: info?.value?.namespaceSelector ?? '',
                       ),
-                      onChanged: (_) => setState(() {}),
                     ),
                   ),
                   SizedBox(
@@ -141,24 +169,6 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
                   ),
                 ],
               ),
-              // A role may allow several namespaces; a token is for one.
-              if (choices.length > 1)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final n in choices)
-                        ChoiceChip(
-                          label: Text(n),
-                          selected: _namespace.text.trim() == n,
-                          onSelected: (_) =>
-                              setState(() => _namespace.text = n),
-                        ),
-                    ],
-                  ),
-                ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed:
