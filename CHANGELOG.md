@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Added
+- Homebrew cask for macOS (`packaging/homebrew/transikey.rb`): `brew install --cask digitalis-io/tap/transikey`, with `livecheck`, a `zap` stanza and caveats for the unsigned first launch; the release workflow renders version and checksum from the published release and pushes the cask to `digitalis-io/homebrew-tap`
 - Several database mounts at once: mounts are discovered from the server (`sys/internal/ui/mounts`), roles are grouped by mount, and the Database mount setting becomes a comma separated fallback
 - Engine, host, port and database are detected from the role's connection when policy allows; otherwise they are chosen once and remembered per mount
 - Cassandra (`cqlsh`) in the Connect section; the password is never part of the command
