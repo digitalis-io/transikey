@@ -68,6 +68,7 @@ class _AppShellState extends ConsumerState<AppShell> with WindowListener {
       LogicalKeyboardKey.digit4,
       LogicalKeyboardKey.digit5,
       LogicalKeyboardKey.digit6,
+      LogicalKeyboardKey.digit7,
     ];
     return {
       for (var i = 0; i < appDestinations.length; i++)

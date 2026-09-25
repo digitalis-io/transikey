@@ -44,6 +44,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
   late final _mounts = {
     'Database mount': TextEditingController(text: _draft.databaseMount),
     'SSH mount': TextEditingController(text: _draft.sshMount),
+    'Kubernetes mount': TextEditingController(text: _draft.kubernetesMount),
     'Userpass mount': TextEditingController(text: _draft.userpassMount),
     'AppRole mount': TextEditingController(text: _draft.approleMount),
     'LDAP mount': TextEditingController(text: _draft.ldapMount),
@@ -66,6 +67,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
     namespace: _namespace.text.trim(),
     databaseMount: _mounts['Database mount']!.text,
     sshMount: _mounts['SSH mount']!.text,
+    kubernetesMount: _mounts['Kubernetes mount']!.text,
     userpassMount: _mounts['Userpass mount']!.text,
     approleMount: _mounts['AppRole mount']!.text,
     ldapMount: _mounts['LDAP mount']!.text,
@@ -296,7 +298,8 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                   controller: e.value,
                   decoration: InputDecoration(
                     labelText: e.key,
-                    helperText: e.key == 'Database mount'
+                    helperText:
+                        e.key == 'Database mount' || e.key == 'Kubernetes mount'
                         ? 'Used when the server does not list its mounts. '
                               'Separate several with commas.'
                         : null,
