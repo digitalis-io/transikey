@@ -2,24 +2,31 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-/// Namespace input with a filtered list of known namespaces: the ones used
-/// before with this role first, then the ones the role allows. Free text
-/// always works, for roles that allow any namespace or that the token may
-/// not read.
+/// Namespace picker: several namespaces, one token each. The list holds
+/// the namespaces used before with this role first, then the ones the
+/// role allows; typing filters it. A typed name is added with Enter, for
+/// roles that allow any namespace or that the token may not read.
 class NamespaceField extends StatefulWidget {
   const NamespaceField({
     super.key,
     required this.controller,
     required this.focusNode,
+    required this.selected,
+    required this.onChanged,
     this.recent = const [],
     this.allowed = const [],
+    this.max = 10,
     this.helperText,
   });
 
+  /// What is typed: a filter for the list and a name to add.
   final TextEditingController controller;
   final FocusNode focusNode;
+  final List<String> selected;
+  final ValueChanged<List<String>> onChanged;
   final List<String> recent;
   final List<String> allowed;
+  final int max;
   final String? helperText;
 
   @override
@@ -37,18 +44,16 @@ class _NamespaceFieldState extends State<NamespaceField> {
   ];
 
   /// Built from the current widget on every call: the role's namespaces
-  /// often arrive after the field was filled in.
+  /// often arrive after the field is on screen.
   List<String> get _offered {
-    final options = _options;
-    final text = widget.controller.text.trim();
-    // A filled-in name is a starting point, not a filter: show them all.
-    if (text.isEmpty || options.contains(text)) return options;
-    final query = text.toLowerCase();
+    final query = widget.controller.text.trim().toLowerCase();
     return [
-      for (final n in options)
-        if (n.toLowerCase().contains(query)) n,
+      for (final n in _options)
+        if (query.isEmpty || n.toLowerCase().contains(query)) n,
     ];
   }
+
+  bool get _full => widget.selected.length >= widget.max;
 
   @override
   void initState() {
@@ -73,52 +78,103 @@ class _NamespaceFieldState extends State<NamespaceField> {
     if (!show && _menu.isOpen && widget.focusNode.hasFocus) _menu.close();
   }
 
-  void _choose(String namespace) {
-    widget.controller.value = TextEditingValue(
-      text: namespace,
-      selection: TextSelection.collapsed(offset: namespace.length),
-    );
-    _menu.close();
+  void _toggle(String namespace) {
+    final selected = [...widget.selected];
+    if (!selected.remove(namespace)) {
+      if (_full) return;
+      selected.add(namespace);
+    }
+    widget.onChanged(selected);
+  }
+
+  void _addTyped() {
+    final typed = widget.controller.text.trim();
+    if (typed.isNotEmpty && !widget.selected.contains(typed) && !_full) {
+      widget.onChanged([...widget.selected, typed]);
+    }
+    widget.controller.clear();
+    widget.focusNode.requestFocus();
   }
 
   @override
-  Widget build(BuildContext context) => MenuAnchor(
-    controller: _menu,
-    childFocusNode: widget.focusNode,
-    // Scrolls instead of growing: a role may allow many namespaces.
-    style: const MenuStyle(maximumSize: WidgetStatePropertyAll(Size(260, 240))),
-    menuChildren: [
-      for (final n in _offered)
-        MenuItemButton(
-          onPressed: () => _choose(n),
-          trailingIcon: widget.recent.contains(n)
-              ? const Tooltip(
-                  message: 'Used before',
-                  child: Icon(Icons.history, size: 18),
-                )
-              : null,
-          child: Text(n),
+  Widget build(BuildContext context) {
+    final field = MenuAnchor(
+      controller: _menu,
+      childFocusNode: widget.focusNode,
+      // Scrolls instead of growing: a role may allow many namespaces.
+      style: const MenuStyle(
+        maximumSize: WidgetStatePropertyAll(Size(300, 240)),
+      ),
+      menuChildren: [
+        for (final n in _offered)
+          CheckboxMenuButton(
+            value: widget.selected.contains(n),
+            // Stays open: ticking several is the point.
+            closeOnActivate: false,
+            onChanged: _full && !widget.selected.contains(n)
+                ? null
+                : (_) => _toggle(n),
+            trailingIcon: widget.recent.contains(n)
+                ? const Tooltip(
+                    message: 'Used before',
+                    child: Icon(Icons.history, size: 18),
+                  )
+                : null,
+            child: Text(n),
+          ),
+      ],
+      builder: (context, menu, _) => TextField(
+        controller: widget.controller,
+        focusNode: widget.focusNode,
+        onTap: _sync,
+        onSubmitted: (_) => _addTyped(),
+        decoration: InputDecoration(
+          labelText: 'Namespaces',
+          hintText: widget.selected.isEmpty ? null : 'Add another',
+          helperText: _full
+              ? 'At most ${widget.max} namespaces at once'
+              : widget.helperText,
+          suffixIcon: _options.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Show namespaces',
+                  icon: const Icon(Icons.arrow_drop_down),
+                  onPressed: () {
+                    widget.focusNode.requestFocus();
+                    menu.isOpen ? menu.close() : menu.open();
+                  },
+                ),
+        ),
+      ),
+    );
+    return field;
+  }
+}
+
+/// The chosen namespaces as removable chips. Kept out of [NamespaceField]
+/// so they can use the full width instead of stacking under the field.
+class NamespaceChips extends StatelessWidget {
+  const NamespaceChips({
+    super.key,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<String> selected;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 6,
+    runSpacing: 6,
+    children: [
+      for (final n in selected)
+        InputChip(
+          label: Text(n),
+          onDeleted: () => onChanged([...selected]..remove(n)),
+          deleteButtonTooltipMessage: 'Remove $n',
         ),
     ],
-    builder: (context, menu, _) => TextField(
-      controller: widget.controller,
-      focusNode: widget.focusNode,
-      onTap: _sync,
-      decoration: InputDecoration(
-        labelText: 'Namespace',
-        helperText: widget.helperText,
-        suffixIcon: _options.isEmpty
-            ? null
-            : IconButton(
-                tooltip: 'Show namespaces',
-                icon: const Icon(Icons.arrow_drop_down),
-                onPressed: () {
-                  widget.focusNode.requestFocus();
-                  menu.isOpen ? menu.close() : menu.open();
-                },
-              ),
-      ),
-    ),
   );
 }
 

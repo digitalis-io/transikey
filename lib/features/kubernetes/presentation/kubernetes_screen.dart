@@ -25,9 +25,8 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
   KubernetesRoleRef? _selected;
   bool _clusterRoleBinding = false;
 
-  /// The namespace the app filled in, so a role switch replaces it but
-  /// never what the user typed.
-  String? _suggested;
+  /// Namespaces to request, one token each.
+  List<String> _chosen = const [];
 
   /// Fills the namespace once the selected role is read. Opened with
   /// fireImmediately: a role picked again may already be loaded.
@@ -54,9 +53,12 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
     if (picked == _selected) return;
     // Credentials of the previous role must not linger on screen.
     ref.read(kubernetesCredentialsProvider.notifier).clear();
-    if (_namespace.text == _suggested) _namespace.clear();
-    _suggested = null;
-    setState(() => _selected = picked);
+    // Namespaces belong to a role: start over with the next one.
+    _namespace.clear();
+    setState(() {
+      _selected = picked;
+      _chosen = const [];
+    });
     // Known right away, also when the role cannot be read.
     _suggest(null);
     _roleInfo?.close();
@@ -77,9 +79,9 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
   void _suggest(KubernetesRoleInfo? info) {
     final namespace =
         _recent(_selected).firstOrNull ?? info?.suggestedNamespace;
-    if (namespace == null || _namespace.text.isNotEmpty) return;
-    _namespace.text = namespace;
-    _suggested = namespace;
+    if (namespace == null || _chosen.isNotEmpty) return;
+    if (_namespace.text.trim().isNotEmpty) return;
+    setState(() => _chosen = [namespace]);
   }
 
   @override
@@ -97,12 +99,17 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
       settingsProvider.select((s) => s.value?.kubernetesRecentNamespaces),
     );
     final recent = _recent(selected);
+    final namespaces = namespacesToRequest(_chosen, _namespace.text);
+    final tooMany = namespaces.length > maxNamespacesPerRequest;
     final severalMounts = (groups.value?.length ?? 0) > 1;
     final label = selected == null
         ? null
         : severalMounts
         ? '${selected.mount}/${selected.role}'
         : selected.role;
+    final count = namespaces.length > 1
+        ? ' (${namespaces.length} namespaces)'
+        : '';
 
     return FeaturePage(
       title: 'Kubernetes Access',
@@ -127,13 +134,17 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
+                // Top-aligned: helper lines differ in height between fields.
+                crossAxisAlignment: WrapCrossAlignment.start,
                 children: [
                   SizedBox(
-                    width: 260,
+                    width: 300,
                     child: NamespaceField(
                       controller: _namespace,
                       focusNode: _namespaceFocus,
+                      selected: _chosen,
+                      onChanged: (v) => setState(() => _chosen = v),
+                      max: maxNamespacesPerRequest,
                       recent: recent,
                       allowed: choices,
                       helperText: namespaceHelp(
@@ -169,32 +180,44 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
                   ),
                 ],
               ),
+              if (_chosen.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                NamespaceChips(
+                  selected: _chosen,
+                  onChanged: (v) => setState(() => _chosen = v),
+                ),
+              ],
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed:
                     selected == null ||
-                        _namespace.text.trim().isEmpty ||
+                        namespaces.isEmpty ||
+                        tooMany ||
                         credentials.isLoading
                     ? null
                     : () => ref
                           .read(kubernetesCredentialsProvider.notifier)
                           .request((
                             role: selected,
-                            namespace: _namespace.text.trim(),
+                            namespaces: namespaces,
                             ttl: _ttl.text.trim(),
                             clusterRoleBinding: _clusterRoleBinding,
                           )),
                 icon: const Icon(Icons.vpn_key),
                 label: Text(
-                  label == null ? 'Request token' : 'Request token for $label',
+                  label == null
+                      ? 'Request token'
+                      : 'Request token for $label$count',
                 ),
               ),
-              if (selected == null || _namespace.text.trim().isEmpty)
+              if (selected == null || namespaces.isEmpty || tooMany)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     selected == null
                         ? 'Pick a role in the list on the left first.'
+                        : tooMany
+                        ? 'At most $maxNamespacesPerRequest namespaces at once.'
                         : 'Enter the namespace for the service account.',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
@@ -202,7 +225,7 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
                   ),
                 ),
               const SizedBox(height: 16),
-              AsyncValueView<KubernetesCredentials?>(
+              AsyncValueView<KubernetesTokenSet?>(
                 value: credentials,
                 empty: 'Request a token to see it here.',
                 data: (c) => KubernetesCredentialsCard(c!),

@@ -29,6 +29,31 @@ abstract class KubernetesCredentials with _$KubernetesCredentials {
       'serviceAccountToken: ***)';
 }
 
+/// Tokens of one role, one per namespace: the engine binds a service
+/// account to a single namespace, so several namespaces take several
+/// requests. [failures] maps each namespace the server refused to why.
+class KubernetesTokenSet {
+  const KubernetesTokenSet({
+    required this.mount,
+    required this.role,
+    required this.tokens,
+    this.failures = const {},
+  });
+
+  final String mount;
+  final String role;
+  final List<KubernetesCredentials> tokens;
+  final Map<String, String> failures;
+
+  /// Identifies the role across mounts.
+  String get key => '$mount/$role';
+
+  @override
+  String toString() =>
+      'KubernetesTokenSet(mount: $mount, role: $role, tokens: $tokens, '
+      'failures: $failures)';
+}
+
 /// What a Kubernetes role allows, read from `<mount>/roles/<role>`.
 class KubernetesRoleInfo {
   const KubernetesRoleInfo({

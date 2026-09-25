@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers/clipboard_actions.dart';
+import '../../../core/errors/vault_exception.dart';
 import '../../../core/models/kubernetes_credentials.dart';
 import '../../../core/utils/home_paths.dart';
 import '../../../core/utils/kubeconfig.dart';
@@ -35,46 +36,82 @@ final kubeCaReaderProvider = Provider<Future<String> Function(String path)>(
   (ref) => readCaCertificate,
 );
 
-/// Issued token, titled `mount/role`.
+/// Issued tokens of one role, one section per namespace, titled
+/// `mount/role`. Namespaces the server refused are listed with the reason.
 class KubernetesCredentialsCard extends ConsumerWidget {
-  const KubernetesCredentialsCard(this.credentials, {super.key});
+  const KubernetesCredentialsCard(this.result, {super.key});
 
-  final KubernetesCredentials credentials;
+  final KubernetesTokenSet result;
+
+  Future<void> _revokeAll(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(kubernetesCredentialsProvider.notifier).revokeAll();
+    } on VaultException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     void copy(String v) => copySecret(context, ref, v);
     SecretField plain(String label, String value) =>
         SecretField(label: label, value: value, sensitive: false, onCopy: copy);
-    final c = credentials;
+    final theme = Theme.of(context);
+    final r = result;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(c.key, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            plain('Service account', c.serviceAccountName),
-            plain('Namespace', c.serviceAccountNamespace),
-            SecretField(
-              label: 'Token',
-              value: c.serviceAccountToken,
-              multiline: true,
-              onCopy: copy,
-            ),
-            plain('Lease ID', c.lease.leaseId),
-            plain('Lease duration', '${c.lease.leaseDuration.inSeconds}s'),
-            const SizedBox(height: 8),
-            LeaseCountdown(leaseId: c.lease.leaseId),
+            Text(r.key, style: theme.textTheme.titleMedium),
+            for (final c in r.tokens) ...[
+              const SizedBox(height: 12),
+              Text(
+                c.serviceAccountNamespace,
+                style: theme.textTheme.titleSmall,
+              ),
+              plain('Service account', c.serviceAccountName),
+              SecretField(
+                label: 'Token',
+                value: c.serviceAccountToken,
+                multiline: true,
+                onCopy: copy,
+              ),
+              plain('Lease ID', c.lease.leaseId),
+              plain('Lease duration', '${c.lease.leaseDuration.inSeconds}s'),
+              const SizedBox(height: 4),
+              LeaseCountdown(leaseId: c.lease.leaseId),
+            ],
+            for (final f in r.failures.entries)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '${f.key}: ${f.value}',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
             const Divider(height: 24),
-            // A new token must not reuse the file saved for the old one.
-            _ConnectSection(key: ObjectKey(c), credentials: c),
+            // New tokens must not reuse the file saved for the old ones.
+            _ConnectSection(key: ObjectKey(r), tokens: r.tokens),
             const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: ref.read(kubernetesCredentialsProvider.notifier).clear,
-              icon: const Icon(Icons.visibility_off),
-              label: const Text('Clear from screen'),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: ref
+                      .read(kubernetesCredentialsProvider.notifier)
+                      .clear,
+                  icon: const Icon(Icons.visibility_off),
+                  label: const Text('Clear from screen'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _revokeAll(context, ref),
+                  icon: const Icon(Icons.block),
+                  label: Text(r.tokens.length > 1 ? 'Revoke all' : 'Revoke'),
+                ),
+              ],
             ),
           ],
         ),
@@ -83,19 +120,19 @@ class KubernetesCredentialsCard extends ConsumerWidget {
   }
 }
 
-/// Kubeconfig for the token. Vault does not return the API server, so the
+/// One kubeconfig for all tokens, one context each. Vault does not return the API server, so the
 /// address and CA are typed once per mount and remembered.
 class _ConnectSection extends ConsumerStatefulWidget {
-  const _ConnectSection({super.key, required this.credentials});
+  const _ConnectSection({super.key, required this.tokens});
 
-  final KubernetesCredentials credentials;
+  final List<KubernetesCredentials> tokens;
 
   @override
   ConsumerState<_ConnectSection> createState() => _ConnectSectionState();
 }
 
 class _ConnectSectionState extends ConsumerState<_ConnectSection> {
-  String get _mount => widget.credentials.mount;
+  String get _mount => widget.tokens.first.mount;
 
   late final SavedKubeTarget _initial =
       ref.read(settingsProvider).value?.kubernetesTargets[_mount] ??
@@ -142,11 +179,7 @@ class _ConnectSectionState extends ConsumerState<_ConnectSection> {
     final target = _target;
     try {
       final pem = await ref.read(kubeCaReaderProvider)(target.caPath);
-      return kubeconfigYaml(
-        widget.credentials,
-        server: target.server,
-        caPem: pem,
-      );
+      return kubeconfigYaml(widget.tokens, server: target.server, caPem: pem);
     } on FormatException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
       return null;
@@ -189,7 +222,7 @@ class _ConnectSectionState extends ConsumerState<_ConnectSection> {
 
   Future<void> _save() async {
     final messenger = ScaffoldMessenger.of(context);
-    final c = widget.credentials;
+    final c = widget.tokens.first;
     final yaml = await _kubeconfig();
     if (yaml == null) return;
     final path = await ref.read(kubeconfigSaveLocationProvider)(
@@ -278,16 +311,16 @@ class _ConnectSectionState extends ConsumerState<_ConnectSection> {
           ),
         if (savedPath != null) ...[
           const SizedBox(height: 8),
-          SecretField(
-            label: 'kubectl command',
-            value: kubectlCommand(
-              savedPath,
-              widget.credentials.serviceAccountNamespace,
+          for (final t in widget.tokens)
+            SecretField(
+              label: widget.tokens.length > 1
+                  ? 'kubectl · ${t.serviceAccountNamespace}'
+                  : 'kubectl command',
+              value: kubectlCommand(savedPath, t),
+              sensitive: false,
+              multiline: true,
+              onCopy: (v) => copySecret(context, ref, v),
             ),
-            sensitive: false,
-            multiline: true,
-            onCopy: (v) => copySecret(context, ref, v),
-          ),
         ],
       ],
     );

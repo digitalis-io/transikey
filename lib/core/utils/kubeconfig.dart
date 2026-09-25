@@ -5,20 +5,22 @@ import '../models/kubernetes_credentials.dart';
 import 'home_paths.dart';
 import 'shell_quote.dart';
 
-/// Kubeconfig with one cluster, one user (the service account token) and
-/// one context. Vault does not return the API server, so [server] and
-/// [caPem] come from the user. The CA is embedded, not referenced by path,
-/// so the file works from any directory and on any machine. An empty
-/// [caPem] leaves kubectl on the system trust store.
+/// Kubeconfig with one cluster and, per token, one user and one context
+/// set to the token's namespace. The first token's context is current.
+/// Vault does not return the API server, so [server] and [caPem] come from
+/// the user. The CA is embedded, not referenced by path, so the file works
+/// from any directory and on any machine. An empty [caPem] leaves kubectl
+/// on the system trust store.
 ///
 /// Values are written as JSON strings, which YAML reads verbatim.
 String kubeconfigYaml(
-  KubernetesCredentials creds, {
+  List<KubernetesCredentials> tokens, {
   required String server,
   String caPem = '',
 }) {
+  if (tokens.isEmpty) throw ArgumentError.value(tokens, 'tokens', 'empty');
   String q(String v) => jsonEncode(v);
-  final name = q('transikey-${creds.mount}-${creds.role}'.replaceAll('/', '-'));
+  final cluster = q(kubeClusterName(tokens.first.mount));
   final ca = caPem.trim().isEmpty
       ? ''
       : base64.encode(utf8.encode('${caPem.trim()}\n'));
@@ -26,24 +28,36 @@ String kubeconfigYaml(
     'apiVersion: v1',
     'kind: Config',
     'clusters:',
-    '  - name: $name',
+    '  - name: $cluster',
     '    cluster:',
     '      server: ${q(server.trim())}',
     if (ca.isNotEmpty) '      certificate-authority-data: ${q(ca)}',
     'users:',
-    '  - name: $name',
-    '    user:',
-    '      token: ${q(creds.serviceAccountToken)}',
+    for (final t in tokens) ...[
+      '  - name: ${q(kubeContextName(t))}',
+      '    user:',
+      '      token: ${q(t.serviceAccountToken)}',
+    ],
     'contexts:',
-    '  - name: $name',
-    '    context:',
-    '      cluster: $name',
-    '      user: $name',
-    '      namespace: ${q(creds.serviceAccountNamespace)}',
-    'current-context: $name',
+    for (final t in tokens) ...[
+      '  - name: ${q(kubeContextName(t))}',
+      '    context:',
+      '      cluster: $cluster',
+      '      user: ${q(kubeContextName(t))}',
+      '      namespace: ${q(t.serviceAccountNamespace)}',
+    ],
+    'current-context: ${q(kubeContextName(tokens.first))}',
     '',
   ].join('\n');
 }
+
+/// `transikey-<mount>`, slashes turned into dashes.
+String kubeClusterName(String mount) => 'transikey-$mount'.replaceAll('/', '-');
+
+/// `transikey-<mount>-<role>-<namespace>`: one context per token.
+String kubeContextName(KubernetesCredentials t) =>
+    '${kubeClusterName(t.mount)}-${t.role}-${t.serviceAccountNamespace}'
+        .replaceAll('/', '-');
 
 /// PEM text of the CA certificate at [path], or empty when [path] is empty.
 /// Throws a [FormatException] with a message for the user when the path is
@@ -70,11 +84,13 @@ Future<String> readCaCertificate(
   return pem;
 }
 
-/// kubectl against a saved kubeconfig. The token stays in the file, never
-/// in argv or the shell history.
-String kubectlCommand(String kubeconfigPath, String namespace) =>
-    'KUBECONFIG=${shellQuote(kubeconfigPath)} kubectl get pods '
-    '-n ${shellQuote(namespace)}';
+/// kubectl against a saved kubeconfig, in the context of [token]. `-n`
+/// alone would not do: each namespace has its own token. The token stays
+/// in the file, never in argv or the shell history.
+String kubectlCommand(String kubeconfigPath, KubernetesCredentials token) =>
+    'KUBECONFIG=${shellQuote(kubeconfigPath)} kubectl '
+    '--context ${shellQuote(kubeContextName(token))} get pods '
+    '-n ${shellQuote(token.serviceAccountNamespace)}';
 
 /// `~/x` -> `<home>/x`. Dart file APIs do not expand `~`.
 String expandHome(String path, [Map<String, String>? environment]) {

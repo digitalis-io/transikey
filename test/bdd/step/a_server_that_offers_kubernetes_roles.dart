@@ -11,7 +11,8 @@ Future<void> aServerThatOffersKubernetesRoles(WidgetTester tester) async {
   final server = KubernetesWorld.server = FakeKubernetesServer();
   KubernetesWorld.clipboard = RecordingClipboard();
   KubernetesWorld.lastClusterRoleBinding = null;
-  KubernetesWorld.lastNamespace = null;
+  KubernetesWorld.issuedNamespaces = [];
+  when(() => server.revokeLease(any())).thenAnswer((_) async {});
   KubernetesWorld.mounts = {'kubernetes': 'kubernetes', 'ssh': 'ssh'};
   when(server.listSecretMounts).thenAnswer((_) async => KubernetesWorld.mounts);
   KubernetesWorld.roles = ['developer', 'viewer'];
@@ -44,7 +45,7 @@ Future<void> aServerThatOffersKubernetesRoles(WidgetTester tester) async {
     if (role == 'developer' && !['team-a', 'team-b'].contains(namespace)) {
       throw ValidationException('Namespace $namespace is not allowed.');
     }
-    KubernetesWorld.lastNamespace = namespace;
+    KubernetesWorld.issuedNamespaces.add(namespace);
     KubernetesWorld.lastClusterRoleBinding =
         call.namedArguments[#clusterRoleBinding] as bool;
     return KubernetesCredentials(

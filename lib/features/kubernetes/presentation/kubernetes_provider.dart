@@ -14,13 +14,28 @@ import '../domain/kubernetes_repository.dart';
 /// A role on one Kubernetes mount.
 typedef KubernetesRoleRef = ({String mount, String role});
 
-/// What to ask for: the role plus the request options.
+/// What to ask for: the role, its namespaces (one token each) and the
+/// request options.
 typedef KubernetesRequest = ({
   KubernetesRoleRef role,
-  String namespace,
+  List<String> namespaces,
   String? ttl,
   bool clusterRoleBinding,
 });
+
+/// Most namespaces in one request. Each one creates a service account and
+/// a binding on the cluster: one click must not create dozens.
+const maxNamespacesPerRequest = 10;
+
+/// Namespaces to request: the chosen ones plus what is typed in the field,
+/// trimmed, without duplicates, in order.
+List<String> namespacesToRequest(List<String> chosen, String typed) {
+  final all = <String>{
+    for (final n in [...chosen, typed])
+      if (n.trim().isNotEmpty) n.trim(),
+  };
+  return all.toList();
+}
 
 final kubernetesRepositoryProvider = Provider<KubernetesRepository>(
   (ref) => VaultKubernetesRepository(ref.watch(apiClientProvider)),
@@ -75,45 +90,93 @@ final kubernetesRoleInfoProvider = FutureProvider.autoDispose
       }
     });
 
-/// Most recently issued token. `AsyncData(null)` is the empty state.
+/// Most recently issued tokens. `AsyncData(null)` is the empty state.
 final kubernetesCredentialsProvider =
-    AsyncNotifierProvider<
-      KubernetesCredentialsNotifier,
-      KubernetesCredentials?
-    >(KubernetesCredentialsNotifier.new);
+    AsyncNotifierProvider<KubernetesCredentialsNotifier, KubernetesTokenSet?>(
+      KubernetesCredentialsNotifier.new,
+    );
 
-class KubernetesCredentialsNotifier
-    extends AsyncNotifier<KubernetesCredentials?> {
+class KubernetesCredentialsNotifier extends AsyncNotifier<KubernetesTokenSet?> {
   // A cleared or repeated request must not resurface a stale answer.
   int _generation = 0;
 
   @override
-  Future<KubernetesCredentials?> build() async => null;
+  Future<KubernetesTokenSet?> build() async => null;
 
+  /// One request per namespace. Refused namespaces are listed next to the
+  /// issued tokens; when every namespace is refused, the first error is
+  /// the result and the card stays empty.
   Future<void> request(KubernetesRequest request) async {
     final generation = ++_generation;
     state = const AsyncLoading();
-    final result = await AsyncValue.guard<KubernetesCredentials?>(() async {
-      final creds = await ref
-          .read(kubernetesRepositoryProvider)
-          .requestCredentials(
-            request.role.mount,
-            request.role.role,
-            namespace: request.namespace,
-            ttl: request.ttl,
-            clusterRoleBinding: request.clusterRoleBinding,
-          );
-      ref.read(leasesProvider.notifier).track(creds.lease, creds.key);
-      // Only a namespace the server accepted is worth offering again. A
-      // failed save costs the suggestion, not the token already issued.
+    final result = await AsyncValue.guard<KubernetesTokenSet?>(() async {
+      final namespaces = request.namespaces;
+      if (namespaces.isEmpty) {
+        throw const ValidationException('Namespace is required.');
+      }
+      if (namespaces.length > maxNamespacesPerRequest) {
+        throw const ValidationException(
+          'At most $maxNamespacesPerRequest namespaces at once.',
+        );
+      }
+      final repository = ref.read(kubernetesRepositoryProvider);
+      final outcomes = await Future.wait([
+        for (final namespace in namespaces)
+          repository
+              .requestCredentials(
+                request.role.mount,
+                request.role.role,
+                namespace: namespace,
+                ttl: request.ttl,
+                clusterRoleBinding: request.clusterRoleBinding,
+              )
+              .then<Object>((c) => c, onError: (Object e) => e),
+      ]);
+      final tokens = outcomes.whereType<KubernetesCredentials>().toList();
+      final errors = {
+        for (var i = 0; i < namespaces.length; i++)
+          if (outcomes[i] is! KubernetesCredentials) namespaces[i]: outcomes[i],
+      };
+      if (tokens.isEmpty) throw errors.values.first;
+      for (final t in tokens) {
+        ref
+            .read(leasesProvider.notifier)
+            .track(t.lease, '${t.key} · ${t.serviceAccountNamespace}');
+      }
+      // Only namespaces the server accepted are worth offering again. A
+      // failed save costs the suggestion, not the tokens already issued.
       try {
         await ref
             .read(settingsProvider.notifier)
-            .change((s) => s.withRecentNamespace(creds.key, request.namespace));
+            .change(
+              (s) => tokens.reversed.fold(
+                s,
+                (s, t) =>
+                    s.withRecentNamespace(t.key, t.serviceAccountNamespace),
+              ),
+            );
       } catch (_) {}
-      return creds;
+      return KubernetesTokenSet(
+        mount: request.role.mount,
+        role: request.role.role,
+        tokens: tokens,
+        failures: {
+          for (final e in errors.entries)
+            e.key: e.value is VaultException
+                ? (e.value as VaultException).message
+                : '${e.value}',
+        },
+      );
     });
     if (ref.mounted && generation == _generation) state = result;
+  }
+
+  /// Revokes every token of the result, then clears it.
+  Future<void> revokeAll() async {
+    final tokens = state.value?.tokens ?? const [];
+    final leases = ref.read(leasesProvider.notifier);
+    await Future.wait([for (final t in tokens) leases.revoke(t.lease.leaseId)]);
+    clear();
   }
 
   void clear() {

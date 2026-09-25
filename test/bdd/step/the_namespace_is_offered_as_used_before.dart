@@ -6,11 +6,11 @@ Future<void> theNamespaceIsOfferedAsUsedBefore(
   WidgetTester tester,
   String namespace,
 ) async {
-  await tester.tap(find.widgetWithText(TextField, 'Namespace'));
+  await tester.tap(find.widgetWithText(TextField, 'Namespaces'));
   await tester.pumpAndSettle();
   expect(
     find.descendant(
-      of: find.widgetWithText(MenuItemButton, namespace),
+      of: find.widgetWithText(CheckboxMenuButton, namespace),
       matching: find.byIcon(Icons.history),
     ),
     findsOneWidget,

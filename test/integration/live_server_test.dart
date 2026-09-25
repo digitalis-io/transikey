@@ -470,7 +470,7 @@ void main() {
       await writePrivateFile(
         path,
         kubeconfigYaml(
-          creds,
+          [creds],
           server: apiServer,
           caPem: await readCaCertificate(ca.absolute.path),
         ),

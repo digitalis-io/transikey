@@ -1,7 +1,9 @@
 Feature: Kubernetes credentials
   Roles come from every Kubernetes mount. A token belongs to one role and
-  one namespace, and disappears as soon as another role is picked. The
-  cluster address is typed once per mount and remembered.
+  one namespace: several namespaces give one token each, shown together
+  and joined in one kubeconfig with a context per namespace. They
+  disappear as soon as another role is picked. The cluster address is
+  typed once per mount and remembered.
 
   Widget level scenarios against a fake server: settings live in an
   in-memory store that dies with the scenario and copies go to a fake
@@ -33,12 +35,44 @@ Feature: Kubernetes credentials
     Then I see the text {'team-a'}
     And I see the text {'Allowed: team-a, team-b'}
 
-  Scenario: One of several allowed namespaces is picked
+  Scenario: Only the chosen namespace gets a token
+    Given the Kubernetes access screen is open
+    And I pick the role {'developer'}
+    When I request a Kubernetes token
+    Then the tokens are issued for the namespaces {'team-a'}
+
+  Scenario: Several namespaces give one token each
     Given the Kubernetes access screen is open
     And I pick the role {'developer'}
     When I choose the namespace {'team-b'}
     And I request a Kubernetes token
-    Then the token is issued for the namespace {'team-b'}
+    Then the tokens are issued for the namespaces {'team-a, team-b'}
+    And I see the text {'Revoke all'}
+
+  Scenario: A refused namespace does not stop the others
+    Given the Kubernetes access screen is open
+    And I pick the role {'developer'}
+    And I add the namespace {'default'}
+    When I request a Kubernetes token
+    Then the tokens are issued for the namespaces {'team-a'}
+    And I see the text {'default: Namespace default is not allowed.'}
+
+  Scenario: The kubeconfig has one context per namespace
+    Given the Kubernetes access screen is open
+    And I pick the role {'developer'}
+    And I choose the namespace {'team-b'}
+    And I request a Kubernetes token
+    When I set the cluster address {'https://k8s.test:6443'} with the CA {'/etc/k8s/ca.crt'}
+    And I copy the kubeconfig
+    Then the copied kubeconfig has a context for each of the namespaces {'team-a, team-b'}
+
+  Scenario: Revoking removes every token from the screen
+    Given the Kubernetes access screen is open
+    And I pick the role {'developer'}
+    And I choose the namespace {'team-b'}
+    And I request a Kubernetes token
+    When I revoke the tokens
+    Then I do not see the text {'Token'}
 
   Scenario: The namespace is filled in again when coming back to a role
     Given the Kubernetes access screen is open
@@ -50,7 +84,7 @@ Feature: Kubernetes credentials
   Scenario: The namespaces offered narrow down as I type
     Given the Kubernetes access screen is open
     And I pick the role {'developer'}
-    When I enter the namespace {'b'}
+    When I type {'b'} in the namespace field
     Then the namespaces offered are {'team-b'}
 
   Scenario: A namespace used before is filled in when the role cannot tell

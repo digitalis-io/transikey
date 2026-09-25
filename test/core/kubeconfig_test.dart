@@ -30,7 +30,7 @@ void main() {
   group('kubeconfig', () {
     test('holds cluster, user and context for the token', () {
       final yaml = kubeconfigYaml(
-        _creds(),
+        [_creds()],
         server: ' https://k8s.example.com:6443 ',
         caPem: _pem,
       );
@@ -45,17 +45,62 @@ void main() {
       expect(yaml, contains('token: "tok-123"'));
       expect(yaml, contains('namespace: "team-a"'));
       // Mount paths hold slashes; names stay one word.
-      expect(yaml, contains('current-context: "transikey-k8s-prod-developer"'));
+      expect(
+        yaml,
+        contains('current-context: "transikey-k8s-prod-developer-team-a"'),
+      );
+    });
+
+    test('several tokens share the cluster, one user and context each', () {
+      final yaml = kubeconfigYaml([
+        _creds(token: 'tok-a', ns: 'team-a'),
+        _creds(token: 'tok-b', ns: 'team-b'),
+      ], server: 'https://k8s:6443');
+      expect(
+        RegExp(
+          r'^  - name: "transikey-k8s-prod"$',
+          multiLine: true,
+        ).allMatches(yaml),
+        hasLength(1),
+      );
+      for (final (ns, token) in [('team-a', 'tok-a'), ('team-b', 'tok-b')]) {
+        final name = '"transikey-k8s-prod-developer-$ns"';
+        // One user and one context of that name.
+        expect(
+          RegExp(
+            '^  - name: ${RegExp.escape(name)}\$',
+            multiLine: true,
+          ).allMatches(yaml),
+          hasLength(2),
+        );
+        expect(yaml, contains('token: "$token"'));
+        expect(yaml, contains('namespace: "$ns"'));
+      }
+      expect(yaml, contains('user: "transikey-k8s-prod-developer-team-b"'));
+      // The first namespace is where kubectl starts.
+      expect(
+        yaml,
+        contains('current-context: "transikey-k8s-prod-developer-team-a"'),
+      );
+    });
+
+    test('there is no kubeconfig without a token', () {
+      expect(
+        () => kubeconfigYaml(const [], server: 'https://k8s'),
+        throwsArgumentError,
+      );
     });
 
     test('leaves the CA out when there is none', () {
-      final yaml = kubeconfigYaml(_creds(), server: 'https://k8s:6443');
+      final yaml = kubeconfigYaml([_creds()], server: 'https://k8s:6443');
       expect(yaml, isNot(contains('certificate-authority')));
     });
 
     test('a value with quotes or a newline cannot break out of its field', () {
       const token = 'a"b\nkind: Evil';
-      final yaml = kubeconfigYaml(_creds(token: token), server: 'https://k8s');
+      final yaml = kubeconfigYaml([
+        _creds(token: token),
+      ], server: 'https://k8s');
       final line = yaml
           .split('\n')
           .singleWhere((l) => l.trimLeft().startsWith('token:'));
@@ -134,20 +179,23 @@ void main() {
 
   group('kubectl command', () {
     test('points KUBECONFIG at the saved file and never holds the token', () {
-      final cmd = kubectlCommand('/home/dev/.kube/dev.yaml', 'team-a');
+      final cmd = kubectlCommand('/home/dev/.kube/dev.yaml', _creds());
       expect(
         cmd,
-        "KUBECONFIG='/home/dev/.kube/dev.yaml' kubectl get pods -n 'team-a'",
+        "KUBECONFIG='/home/dev/.kube/dev.yaml' kubectl "
+        "--context 'transikey-k8s-prod-developer-team-a' "
+        "get pods -n 'team-a'",
       );
+      expect(cmd, isNot(contains('tok-123')));
     });
 
     test('quotes a path with spaces and quotes', () {
-      final cmd = kubectlCommand("/tmp/it's here.yaml", 'ns');
+      final cmd = kubectlCommand("/tmp/it's here.yaml", _creds());
       expect(cmd, startsWith(r"KUBECONFIG='/tmp/it'\''s here.yaml' kubectl"));
     });
 
     test('quotes a namespace that tries to run a command', () {
-      final cmd = kubectlCommand('/tmp/k.yaml', r'a; rm -rf ~');
+      final cmd = kubectlCommand('/tmp/k.yaml', _creds(ns: r'a; rm -rf ~'));
       expect(cmd, endsWith("-n 'a; rm -rf ~'"));
     });
   });

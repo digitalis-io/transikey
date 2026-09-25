@@ -42,6 +42,6 @@ class KubernetesWorld {
   /// `cluster_role_binding` of the last token request.
   static bool? lastClusterRoleBinding;
 
-  /// Namespace of the last token the server issued.
-  static String? lastNamespace;
+  /// Namespaces the server issued tokens for, in request order.
+  static late List<String> issuedNamespaces;
 }
