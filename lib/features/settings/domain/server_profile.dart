@@ -18,6 +18,19 @@ abstract class SavedDbTarget with _$SavedDbTarget {
       _$SavedDbTargetFromJson(json);
 }
 
+/// Kubernetes API server remembered for one Kubernetes mount. Vault does
+/// not return it. Address and CA file path only: no credentials.
+@freezed
+abstract class SavedKubeTarget with _$SavedKubeTarget {
+  const factory SavedKubeTarget({
+    @Default('') String server,
+    @Default('') String caPath,
+  }) = _SavedKubeTarget;
+
+  factory SavedKubeTarget.fromJson(Map<String, dynamic> json) =>
+      _$SavedKubeTargetFromJson(json);
+}
+
 /// Everything that belongs to one Vault / OpenBao server: how to reach it,
 /// where its engines are mounted, and the connect targets used with it.
 /// Holds no secrets. The last username is kept; passwords and tokens never.
@@ -41,6 +54,7 @@ abstract class ServerProfile with _$ServerProfile {
     @Default('approle') String approleMount,
     @Default('ldap') String ldapMount,
     @Default('oidc') String oidcMount,
+    @Default('kubernetes') String kubernetesMount,
     @Default('psql') String databaseClient,
     @Default('127.0.0.1') String databaseHost,
     @Default(5432) int databasePort,
@@ -49,6 +63,9 @@ abstract class ServerProfile with _$ServerProfile {
     /// Connect targets keyed by `mount` or `mount/connection`. The four
     /// fields above are the default for a key that is not in here.
     @Default({}) Map<String, SavedDbTarget> databaseTargets,
+
+    /// Kubernetes API servers keyed by mount.
+    @Default({}) Map<String, SavedKubeTarget> kubernetesTargets,
     @Default('ubuntu') String sshUser,
     @Default('127.0.0.1') String sshHost,
     @Default(2222) int sshPort,

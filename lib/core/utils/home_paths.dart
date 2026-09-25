@@ -32,6 +32,15 @@ String? existingSshDirectory([Map<String, String>? environment]) {
   return Directory(path).existsSync() ? path : null;
 }
 
+/// `~/.kube` when it exists on disk, otherwise null. Hidden in native file
+/// dialogs, like `~/.ssh`.
+String? existingKubeDirectory([Map<String, String>? environment]) {
+  final home = homeDirectory(environment);
+  if (home == null) return null;
+  final path = '$home${Platform.pathSeparator}.kube';
+  return Directory(path).existsSync() ? path : null;
+}
+
 /// The directory holding [filePath], or null when [filePath] carries no
 /// directory part or that directory does not exist.
 String? parentDirectoryOf(String filePath) {

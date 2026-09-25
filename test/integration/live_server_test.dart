@@ -18,6 +18,8 @@ import 'package:transikey/core/api/vault_connection_config.dart';
 import 'package:transikey/core/errors/vault_exception.dart';
 import 'package:transikey/core/utils/db_connect_command.dart';
 import 'package:transikey/core/utils/app_logger.dart';
+import 'package:transikey/core/utils/kubeconfig.dart';
+import 'package:transikey/core/utils/private_file.dart';
 
 const _publicKey =
     'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKHEoTlxhQjqs1uTvVJHAQVwXrWUEgHJ0hZvOaRKWTaK transikey-test';
@@ -361,6 +363,104 @@ void main() {
         client.signPublicKey('sign', 'not a key'),
         throwsA(isA<ValidationException>()),
       );
+    });
+  }, skip: skip);
+
+  group('kubernetes', () {
+    final namespace = env['DEV_K8S_NAMESPACE'] ?? 'transikey-test';
+    final apiServer = 'https://127.0.0.1:${env['DEV_K3S_PORT'] ?? '6443'}';
+
+    // Every token leaves a service account and binding on the cluster until
+    // its lease ends: revoke right away, even when the test fails.
+    void revokeAfterTest(String leaseId) =>
+        addTearDown(() => client.revokeLease(leaseId));
+
+    test('the kubernetes mount is discovered with its roles', () async {
+      await signInAsUser();
+      final mounts = await client.listSecretMounts();
+      expect(mounts['kubernetes'], 'kubernetes');
+      expect(
+        await client.listKubernetesRoles('kubernetes'),
+        containsAll(['developer', 'viewer']),
+      );
+    });
+
+    test('the developer role reveals its allowed namespace', () async {
+      await signInAsUser();
+      final info = await client.describeKubernetesRole(
+        'kubernetes',
+        'developer',
+      );
+      expect(info.suggestedNamespace, namespace);
+      expect(info.roleType, 'Role');
+    });
+
+    test('a token is issued for an allowed namespace', () async {
+      await signInAsUser();
+      final creds = await client.getKubernetesCredentials(
+        'kubernetes',
+        'developer',
+        namespace: namespace,
+        ttl: '15m',
+      );
+      revokeAfterTest(creds.lease.leaseId);
+      expect(creds.serviceAccountToken, isNotEmpty);
+      expect(creds.serviceAccountName, isNotEmpty);
+      expect(creds.serviceAccountNamespace, namespace);
+      expect(creds.lease.leaseDuration, const Duration(minutes: 15));
+    });
+
+    test('a namespace outside the role is refused', () async {
+      await signInAsUser();
+      await expectLater(
+        client.getKubernetesCredentials(
+          'kubernetes',
+          'developer',
+          namespace: 'default',
+        ),
+        throwsA(isA<VaultException>()),
+      );
+    });
+
+    test('a cluster-wide binding is granted on a ClusterRole role', () async {
+      await signInAsUser();
+      final creds = await client.getKubernetesCredentials(
+        'kubernetes',
+        'viewer',
+        namespace: namespace,
+        clusterRoleBinding: true,
+      );
+      revokeAfterTest(creds.lease.leaseId);
+      expect(creds.serviceAccountToken, isNotEmpty);
+    });
+
+    test('the saved kubeconfig lists pods with kubectl', () async {
+      final kubectl = await Process.run('which', ['kubectl']);
+      final ca = File('dev/k3s-ca.crt');
+      if (kubectl.exitCode != 0 || !ca.existsSync()) {
+        markTestSkipped('kubectl or dev/k3s-ca.crt (make dev-k3s-ca) missing');
+        return;
+      }
+      await signInAsUser();
+      final creds = await client.getKubernetesCredentials(
+        'kubernetes',
+        'developer',
+        namespace: namespace,
+      );
+      revokeAfterTest(creds.lease.leaseId);
+      final dir = await Directory.systemTemp.createTemp('transikey-kube-');
+      addTearDown(() => dir.delete(recursive: true));
+      final path = '${dir.path}/kubeconfig.yaml';
+      await writePrivateFile(
+        path,
+        kubeconfigYaml(creds, server: apiServer, caPath: ca.absolute.path),
+      );
+      final result = await Process.run(
+        'kubectl',
+        ['get', 'pods', '-n', namespace],
+        environment: {'KUBECONFIG': path},
+      );
+      expect(result.exitCode, 0, reason: '${result.stderr}');
     });
   }, skip: skip);
 
