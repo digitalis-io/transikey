@@ -139,3 +139,96 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+  homebrew:
+    name: Update Homebrew cask
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Tap key present?
+        id: guard
+        env:
+          BREW_SSH_KEY: ${{ secrets.BREW_SSH_KEY }}
+        run: |
+          if [ -n "$BREW_SSH_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::BREW_SSH_KEY is not set; the cask was not updated."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.enabled == 'true'
+
+      - name: Set up the deploy key
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          BREW_SSH_KEY: ${{ secrets.BREW_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # The secret holds the base64 of the private key, so the PEM newlines
+          # survive the round trip through the secret store.
+          printf '%s' "$BREW_SSH_KEY" | base64 -d > ~/.ssh/tap_key
+          chmod 600 ~/.ssh/tap_key
+          ssh-keygen -y -f ~/.ssh/tap_key > /dev/null   # fail early on a mangled key
+          # Host keys come from GitHub's own API over HTTPS, not from keyscan.
+          curl -fsSL https://api.github.com/meta \
+            | jq -r '.ssh_keys[] | "github.com \(.)"' > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          echo "GIT_SSH_COMMAND=ssh -i ~/.ssh/tap_key -o IdentitiesOnly=yes -o UserKnownHostsFile=~/.ssh/known_hosts" >> "$GITHUB_ENV"
+
+      - name: Clone tap
+        if: steps.guard.outputs.enabled == 'true'
+        run: git clone --depth 1 git@github.com:digitalis-io/homebrew-tap.git tap
+
+      - name: Render cask
+        if: steps.guard.outputs.enabled == 'true'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          asset="transikey-${TAG}-macos-universal.zip"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+
+          # The checksum comes from the published release, never from a local
+          # build, so the cask can only ever describe the artefact users get.
+          curl -fsSL "${base}/SHA256SUMS.txt" -o SHA256SUMS.txt
+          sha="$(awk -v a="$asset" '$2 == a {print $1}' SHA256SUMS.txt)"
+          [ -n "$sha" ] || { echo "no checksum for ${asset}"; exit 1; }
+
+          curl -fsSL "${base}/${asset}" -o "$asset"
+          echo "${sha}  ${asset}" | sha256sum -c -
+
+          mkdir -p tap/Casks
+          sed -E \
+            -e "s|^  version \".*\"$|  version \"${version}\"|" \
+            -e "s|^  sha256 \".*\"$|  sha256 \"${sha}\"|" \
+            packaging/homebrew/transikey.rb > tap/Casks/transikey.rb
+
+          grep -q "version \"${version}\"" tap/Casks/transikey.rb
+          grep -q "sha256 \"${sha}\"" tap/Casks/transikey.rb
+
+      - name: Commit and push
+        if: steps.guard.outputs.enabled == 'true'
+        working-directory: tap
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git add Casks/transikey.rb
+          if git diff --cached --quiet -- Casks/transikey.rb; then
+            echo "cask already up to date"
+            exit 0
+          fi
+          git config user.name "Digitalis Release"
+          git config user.email "releases@digitalis.io"
+          git commit -m "chore(transikey): ${TAG}"
+          git push origin HEAD:main
+
+      - name: Remove the deploy key
+        if: always()
+        run: rm -f ~/.ssh/tap_key

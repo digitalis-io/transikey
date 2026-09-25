@@ -22,7 +22,71 @@ One Flutter codebase for macOS 13+, Windows 11+ and Linux (Ubuntu 22.04+). Built
   <a href="https://youtube.com/shorts/l6h9bdtxv9M">▶ Watch the short demo on YouTube</a>
 </p>
 
-## Quick start
+## Install
+
+### macOS — Homebrew (recommended)
+
+```bash
+brew tap digitalis-io/tap
+brew install --cask transikey
+```
+
+Upgrade and remove with the usual commands:
+
+```bash
+brew upgrade --cask transikey
+brew uninstall --cask --zap transikey
+```
+
+The cask follows every release, release candidates included.
+
+### macOS — manual
+
+Download `transikey-<version>-macos-universal.zip` from the
+[releases page](https://github.com/digitalis-io/transikey/releases), unzip it and move
+`transikey.app` to `/Applications`. Check it against `SHA256SUMS.txt` first:
+
+```bash
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+```
+
+### First launch on macOS
+
+The app is not signed or notarised yet, so Gatekeeper blocks the first launch of a
+downloaded copy — with Homebrew as well. Clear the quarantine flag once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/transikey.app
+open -a transikey
+```
+
+Without the terminal: open `/Applications`, right-click `transikey.app`, choose **Open**, then
+**Open** again in the dialog. On Sequoia, use **System Settings → Privacy & Security → Open Anyway**
+after the first blocked attempt.
+
+`transikey://unwrap?...` share links work as soon as the app sits in `/Applications`; macOS
+registers the scheme from the bundle.
+
+### Uninstall and the keychain
+
+`--zap` removes the app and its preference and cache files. Sessions, tokens and server profiles
+live in the **login keychain**, which Homebrew never touches. Remove them in Keychain Access by
+searching for `transikey` and deleting the matching items.
+
+### Windows and Linux
+
+No package manager integration yet. Download from the
+[releases page](https://github.com/digitalis-io/transikey/releases) and check the file against
+`SHA256SUMS.txt`:
+
+- **Windows**: unzip `transikey-<version>-windows-x64.zip` into a folder you keep, for example
+  `%LOCALAPPDATA%\Programs\Transikey`, and run `transikey.exe`. The build is unsigned, so
+  SmartScreen warns on first start: choose **More info → Run anyway**.
+- **Linux**: `tar -xzf transikey-<version>-linux-x64.tar.gz` and run `transikey/transikey`.
+
+`transikey://` links are registered on macOS only; see [Not implemented yet](#not-implemented-yet).
+
+## Quick start (from source)
 
 You need [Flutter](https://docs.flutter.dev/get-started/install) 3.32 or newer and Docker.
 
@@ -306,7 +370,7 @@ git tag -s v0.1.0 -m "v0.1.0" && git push origin v0.1.0
 | Windows | `transikey-v0.1.0-windows-x64.zip` |
 | Linux | `transikey-v0.1.0-linux-x64.tar.gz` |
 
-`SHA256SUMS.txt` ships with every release. Packages are unsigned for now: macOS Gatekeeper and Windows SmartScreen will warn on first start. A tag with a suffix (`v0.2.0-rc1`) is published as a pre-release.
+`SHA256SUMS.txt` ships with every release. The publish job then renders `packaging/homebrew/transikey.rb` with the new version and the checksum of the macOS zip and pushes it to `digitalis-io/homebrew-tap` as `Casks/transikey.rb`, so `brew upgrade --cask transikey` picks the release up. That step needs the `BREW_SSH_KEY` secret: the base64 of a private SSH key whose public half is a deploy key with write access on the tap. Without the secret the job warns and the release still succeeds. Packages are unsigned for now: macOS Gatekeeper and Windows SmartScreen will warn on first start. A tag with a suffix (`v0.2.0-rc1`) is published as a pre-release.
 
 Regenerate the app icons after a logo change with `python3 tool/make_icons.py` (needs `pillow` and `numpy`).
 
