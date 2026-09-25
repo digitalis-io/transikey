@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transikey/core/models/kubernetes_credentials.dart';
@@ -21,6 +22,8 @@ KubernetesCredentials _creds({
   ),
 );
 
+const _pem = '-----BEGIN CERTIFICATE-----\nMIIBdev\n-----END CERTIFICATE-----';
+
 void main() {
   const home = {'HOME': '/home/dev', 'USERPROFILE': r'C:\Users\dev'};
 
@@ -29,31 +32,25 @@ void main() {
       final yaml = kubeconfigYaml(
         _creds(),
         server: ' https://k8s.example.com:6443 ',
-        caPath: '/etc/k8s/ca.crt',
+        caPem: _pem,
       );
       expect(yaml, contains('kind: Config'));
       expect(yaml, contains('server: "https://k8s.example.com:6443"'));
-      expect(yaml, contains('certificate-authority: "/etc/k8s/ca.crt"'));
+      // Embedded, so the file works from any directory or machine.
+      final data = RegExp(
+        r'certificate-authority-data: "([^"]+)"',
+      ).firstMatch(yaml)!.group(1)!;
+      expect(utf8.decode(base64.decode(data)), '$_pem\n');
+      expect(yaml, isNot(contains('certificate-authority:')));
       expect(yaml, contains('token: "tok-123"'));
       expect(yaml, contains('namespace: "team-a"'));
       // Mount paths hold slashes; names stay one word.
       expect(yaml, contains('current-context: "transikey-k8s-prod-developer"'));
     });
 
-    test('leaves the CA out when no path is given', () {
+    test('leaves the CA out when there is none', () {
       final yaml = kubeconfigYaml(_creds(), server: 'https://k8s:6443');
       expect(yaml, isNot(contains('certificate-authority')));
-    });
-
-    test('expands ~ in the CA path, which kubectl does not', () {
-      final yaml = kubeconfigYaml(
-        _creds(),
-        server: 'https://k8s:6443',
-        caPath: '~/.kube/ca.crt',
-        environment: home,
-      );
-      expect(yaml, isNot(contains('~')));
-      expect(yaml, contains('.kube/ca.crt"'));
     });
 
     test('a value with quotes or a newline cannot break out of its field', () {
@@ -66,6 +63,71 @@ void main() {
       expect(
         yaml.split('\n').where((l) => l.startsWith('kind:')),
         hasLength(1),
+      );
+    });
+  });
+
+  group('CA certificate', () {
+    late Directory dir;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('transikey-ca-');
+      addTearDown(() => dir.delete(recursive: true));
+    });
+
+    test('is read from an absolute path', () async {
+      final file = File('${dir.path}/ca.crt')..writeAsStringSync(_pem);
+      expect(await readCaCertificate(file.path), _pem);
+    });
+
+    test('is read from a path under ~', () async {
+      File('${dir.path}/ca.crt').writeAsStringSync(_pem);
+      final env = {'HOME': dir.path, 'USERPROFILE': dir.path};
+      expect(await readCaCertificate('~/ca.crt', env), _pem);
+    });
+
+    test('an empty path means no CA', () async {
+      expect(await readCaCertificate('  '), isEmpty);
+    });
+
+    test('a relative path is refused', () async {
+      await expectLater(
+        readCaCertificate('dev/k3s-ca.crt'),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('absolute'),
+          ),
+        ),
+      );
+    });
+
+    test('a missing file is refused', () async {
+      await expectLater(
+        readCaCertificate('${dir.path}/missing.crt'),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            startsWith('Cannot read'),
+          ),
+        ),
+      );
+    });
+
+    test('a file without a certificate is refused', () async {
+      final file = File('${dir.path}/key.pem')
+        ..writeAsStringSync('-----BEGIN PRIVATE KEY-----\n');
+      await expectLater(
+        readCaCertificate(file.path),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            startsWith('No PEM certificate'),
+          ),
+        ),
       );
     });
   });

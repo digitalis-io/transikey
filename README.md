@@ -139,13 +139,13 @@ One-time password:
 
 ### 4. Get a Kubernetes service account token and kubeconfig
 
-The dev stack includes a single-node k3s cluster (API `https://127.0.0.1:6443`) wired to the OpenBao Kubernetes secrets engine. Role `developer` issues tokens for the `transikey-test` namespace; role `viewer` is a ClusterRole role that also accepts a cluster-wide binding.
+The dev stack includes a single-node k3s cluster (API `https://127.0.0.1:6443`) wired to the OpenBao Kubernetes secrets engine. Role `developer` issues tokens for the `transikey-test` or `transikey-sandbox` namespace; role `viewer` is a ClusterRole role that also accepts a cluster-wide binding.
 
 1. Open **Kubernetes Access** (`Cmd/Ctrl+4`) and pick the `developer` role. Roles of every Kubernetes mount are listed, grouped by mount.
-2. The **Namespace** is filled in from the role's allowed namespaces when your policy lets the app read the role; otherwise type it. **TTL** is optional (Kubernetes refuses less than `10m`). Tick **Cluster-wide binding** only for a ClusterRole role.
+2. The **Namespace** is filled in from the role's allowed namespaces when your policy lets the app read the role; otherwise type it. When the role allows several namespaces, pick one from the chips under the field: a token is for one namespace. **TTL** is optional (Kubernetes refuses less than `10m`). Tick **Cluster-wide binding** only for a ClusterRole role.
 3. **Request token for developer**. The card shows the service account, its namespace, the masked token and the lease countdown. A namespace the role does not allow is refused by the server and the card stays empty.
-4. In **Connect**, type the **API server URL** and, optionally, the **CA certificate path** once per mount. Vault does not return them, so they are remembered for that mount and survive role switches. For the dev stack: `https://127.0.0.1:6443` and `dev/k3s-ca.crt` (written by `make dev-up`, or run `make dev-k3s-ca`).
-5. **Copy kubeconfig** (clipboard clears like any secret) or **Save kubeconfig**. A saved file is readable by you only (`0600` on macOS and Linux), and the card then offers:
+4. In **Connect**, type the **API server URL** and, optionally, the **CA certificate path** once per mount. Vault does not return them, so they are remembered for that mount and survive role switches. The CA path must be absolute (`~/` works). For the dev stack: `https://127.0.0.1:6443` and the full path to `dev/k3s-ca.crt` in your checkout (written by `make dev-up`, or run `make dev-k3s-ca`).
+5. **Copy kubeconfig** (clipboard clears like any secret) or **Save kubeconfig**. The CA certificate is embedded in the kubeconfig (`certificate-authority-data`), so the file works from any directory or machine; a CA file that cannot be read stops the kubeconfig with a message instead. A saved file is readable by you only (`0600` on macOS and Linux). A copied kubeconfig that you paste into a file gets your shell's default permissions: prefer **Save**. After saving, the card offers:
 
    ```bash
    KUBECONFIG='/Users/me/.kube/kubeconfig-kubernetes-developer.yaml' kubectl get pods -n 'transikey-test'
@@ -192,7 +192,7 @@ All settings live in **Settings** (`Cmd/Ctrl+,`) and are stored in the OS keysto
 | SSH port | integer | `2222` | `22` |
 | SSH private key path | path | `~/.ssh/id_ed25519` | `~/.ssh/work_ed25519` |
 | Kubernetes API server URL (Connect section) | URL, per mount | empty | `https://k8s.example.com:6443` |
-| Kubernetes CA certificate path | path, per mount; empty uses the system trust store | empty | `~/.kube/prod-ca.crt` |
+| Kubernetes CA certificate path | absolute path, per mount; its certificate is embedded in the kubeconfig; empty uses the system trust store | empty | `~/.kube/prod-ca.crt` |
 
 The Database, SSH and Kubernetes Connect rows are edited in the **Connect** section of their screens, not under Settings; the defaults match the dev stack. Database values are kept per mount (per connection when the server reveals it); the defaults apply to a mount you have not edited yet.
 

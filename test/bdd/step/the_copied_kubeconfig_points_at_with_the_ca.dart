@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'kubernetes_world.dart';
@@ -10,5 +12,12 @@ Future<void> theCopiedKubeconfigPointsAtWithTheCa(
 ) async {
   final kubeconfig = KubernetesWorld.clipboard.copies.last;
   expect(kubeconfig, contains('server: "$server"'));
-  expect(kubeconfig, contains('certificate-authority: "$caPath"'));
+  // The CA travels inside the kubeconfig, not as a path to it.
+  final pem = KubernetesWorld.caFiles[caPath]!;
+  expect(
+    kubeconfig,
+    contains(
+      'certificate-authority-data: "${base64.encode(utf8.encode('$pem\n'))}"',
+    ),
+  );
 }

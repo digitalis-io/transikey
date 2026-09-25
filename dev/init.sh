@@ -184,8 +184,9 @@ bao write kubernetes/config \
 # The engine creates a service account, a Role with these rules and a
 # binding for every request, and deletes them when the lease ends.
 rules='{"rules":[{"apiGroups":[""],"resources":["pods","services","configmaps"],"verbs":["get","list","watch"]}]}'
+# Two namespaces: the app offers a choice between them.
 bao write kubernetes/roles/developer \
-  allowed_kubernetes_namespaces="$DEV_K8S_NAMESPACE" \
+  allowed_kubernetes_namespaces="$DEV_K8S_NAMESPACE,transikey-sandbox" \
   kubernetes_role_type=Role \
   generated_role_rules="$rules" \
   token_default_ttl=10m \
@@ -197,7 +198,7 @@ bao write kubernetes/roles/viewer \
   generated_role_rules="$rules" \
   token_default_ttl=10m \
   token_max_ttl=1h >/dev/null
-log "kubernetes roles developer ($DEV_K8S_NAMESPACE), viewer ready"
+log "kubernetes roles developer ($DEV_K8S_NAMESPACE, transikey-sandbox), viewer ready"
 
 cat <<SUMMARY
 

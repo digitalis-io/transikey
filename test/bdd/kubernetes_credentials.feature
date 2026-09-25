@@ -7,12 +7,12 @@ Feature: Kubernetes credentials
   in-memory store that dies with the scenario and copies go to a fake
   clipboard, so nothing is persisted outside the test process. No teardown
   beyond disposing the provider container is needed; scenarios are order
-  independent and parallel safe. Saving a kubeconfig file and its 0600
+  independent and parallel safe. CA files are read from a fake disk. Saving a kubeconfig file and its 0600
   permissions are covered by unit tests: native save dialogs do not run
   under flutter test.
 
   The server fake has one mount called 'kubernetes' with the roles
-  'developer' (readable, allows only the namespace 'team-a') and 'viewer'
+  'developer' (readable, allows the namespaces 'team-a' and 'team-b') and 'viewer'
   (a token may not read it, any namespace allowed).
 
   Background:
@@ -31,7 +31,14 @@ Feature: Kubernetes credentials
     Given the Kubernetes access screen is open
     When I pick the role {'developer'}
     Then I see the text {'team-a'}
-    And I see the text {'Allowed: team-a'}
+    And I see the text {'Allowed: team-a, team-b'}
+
+  Scenario: One of several allowed namespaces is picked
+    Given the Kubernetes access screen is open
+    And I pick the role {'developer'}
+    When I choose the namespace {'team-b'}
+    And I request a Kubernetes token
+    Then the token is issued for the namespace {'team-b'}
 
   Scenario: The namespace is filled in again when coming back to a role
     Given the Kubernetes access screen is open
@@ -70,6 +77,15 @@ Feature: Kubernetes credentials
     And I copy the kubeconfig
     Then the copied kubeconfig points at {'https://k8s.test:6443'} with the CA {'/etc/k8s/ca.crt'}
     And the copied kubeconfig holds the token for the namespace {'team-a'}
+
+  Scenario: A CA certificate that cannot be read stops the kubeconfig
+    Given the Kubernetes access screen is open
+    And I pick the role {'developer'}
+    And I request a Kubernetes token
+    When I set the cluster address {'https://k8s.test:6443'} with the CA {'/etc/k8s/missing.crt'}
+    And I copy the kubeconfig
+    Then I see the text {'Cannot read the CA certificate: /etc/k8s/missing.crt'}
+    And nothing has been copied
 
   Scenario: The kubeconfig cannot be made without a cluster address
     Given the Kubernetes access screen is open

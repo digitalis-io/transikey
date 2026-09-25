@@ -29,6 +29,12 @@ final kubeconfigSaveLocationProvider =
           ),
     );
 
+/// Reads the CA certificate named in the Connect section. Tests replace
+/// it: real file reads do not complete inside widget tests.
+final kubeCaReaderProvider = Provider<Future<String> Function(String path)>(
+  (ref) => readCaCertificate,
+);
+
 /// Issued token, titled `mount/role`.
 class KubernetesCredentialsCard extends ConsumerWidget {
   const KubernetesCredentialsCard(this.credentials, {super.key});
@@ -129,11 +135,29 @@ class _ConnectSectionState extends ConsumerState<_ConnectSection> {
         uri.host.isNotEmpty;
   }
 
-  String get _yaml => kubeconfigYaml(
-    widget.credentials,
-    server: _target.server,
-    caPath: _target.caPath,
-  );
+  /// The kubeconfig, or null after telling the user why the CA could not
+  /// be embedded. A kubeconfig without its CA would fail later, in kubectl.
+  Future<String?> _kubeconfig() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final target = _target;
+    try {
+      final pem = await ref.read(kubeCaReaderProvider)(target.caPath);
+      return kubeconfigYaml(
+        widget.credentials,
+        server: target.server,
+        caPem: pem,
+      );
+    } on FormatException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      return null;
+    }
+  }
+
+  Future<void> _copy() async {
+    final yaml = await _kubeconfig();
+    if (yaml == null || !mounted) return;
+    await copySecret(context, ref, yaml);
+  }
 
   void _persist() {
     final target = _target;
@@ -166,12 +190,14 @@ class _ConnectSectionState extends ConsumerState<_ConnectSection> {
   Future<void> _save() async {
     final messenger = ScaffoldMessenger.of(context);
     final c = widget.credentials;
+    final yaml = await _kubeconfig();
+    if (yaml == null) return;
     final path = await ref.read(kubeconfigSaveLocationProvider)(
       'kubeconfig-${c.mount}-${c.role}.yaml'.replaceAll('/', '-'),
     );
     if (path == null) return;
     try {
-      await writePrivateFile(path, _yaml);
+      await writePrivateFile(path, yaml);
     } on FileSystemException catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Could not save: ${e.message}')),
@@ -231,9 +257,7 @@ class _ConnectSectionState extends ConsumerState<_ConnectSection> {
           runSpacing: 12,
           children: [
             OutlinedButton.icon(
-              onPressed: _serverValid
-                  ? () => copySecret(context, ref, _yaml)
-                  : null,
+              onPressed: _serverValid ? _copy : null,
               icon: const Icon(Icons.copy),
               label: const Text('Copy kubeconfig'),
             ),

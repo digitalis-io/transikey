@@ -8,6 +8,7 @@ import 'package:transikey/core/models/auth_response.dart';
 import 'package:transikey/core/security/secret_store.dart';
 import 'package:transikey/features/auth/domain/vault_session.dart';
 import 'package:transikey/features/auth/presentation/session_provider.dart';
+import 'package:transikey/features/kubernetes/presentation/kubernetes_credentials_card.dart';
 import 'package:transikey/features/kubernetes/presentation/kubernetes_screen.dart';
 import 'package:transikey/features/settings/domain/app_settings.dart';
 import 'package:transikey/features/settings/presentation/settings_provider.dart';
@@ -37,6 +38,7 @@ Future<void> theKubernetesAccessScreenIsOpen(WidgetTester tester) async {
       apiClientProvider.overrideWithValue(KubernetesWorld.server),
       secretStoreProvider.overrideWithValue(store),
       clipboardGuardProvider.overrideWithValue(KubernetesWorld.clipboard),
+      kubeCaReaderProvider.overrideWithValue(KubernetesWorld.readCa),
     ],
   );
   addTearDown(container.dispose);

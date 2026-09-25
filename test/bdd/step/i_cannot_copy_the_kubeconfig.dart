@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'kubernetes_world.dart';
+import 'nothing_has_been_copied.dart';
 
 /// Usage: I cannot copy the kubeconfig
 Future<void> iCannotCopyTheKubeconfig(WidgetTester tester) async {
@@ -12,5 +12,5 @@ Future<void> iCannotCopyTheKubeconfig(WidgetTester tester) async {
     ),
   );
   expect(button.onPressed, isNull);
-  expect(KubernetesWorld.clipboard.copies, isEmpty);
+  await nothingHasBeenCopied(tester);
 }

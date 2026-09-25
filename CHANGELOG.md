@@ -4,9 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 ### Added
-- Kubernetes secrets engine: service account tokens per role and namespace (optional TTL and cluster-wide binding), mounts discovered from the server, namespace pre-filled from the role when policy allows
-- Kubernetes Connect section: API server URL and CA path remembered per mount; copy the kubeconfig or save it as a `0600` file with a ready `KUBECONFIG=… kubectl` command. The token never goes into a command line
-- k3s in the dev stack with Kubernetes roles `developer` (namespace `transikey-test`) and `viewer` (ClusterRole), plus `make dev-k3s-ca`
+- Kubernetes secrets engine: service account tokens per role and namespace (optional TTL and cluster-wide binding), mounts discovered from the server, namespace pre-filled from the role when policy allows, with a choice when the role allows several
+- Kubernetes Connect section: API server URL and CA path remembered per mount, CA certificate embedded in the kubeconfig; copy the kubeconfig or save it as a `0600` file with a ready `KUBECONFIG=… kubectl` command. The token never goes into a command line
+- k3s in the dev stack with Kubernetes roles `developer` (namespaces `transikey-test`, `transikey-sandbox`) and `viewer` (ClusterRole), plus `make dev-k3s-ca`
 - Several database mounts at once: mounts are discovered from the server (`sys/internal/ui/mounts`), roles are grouped by mount, and the Database mount setting becomes a comma separated fallback
 - Engine, host, port and database are detected from the role's connection when policy allows; otherwise they are chosen once and remembered per mount
 - Cassandra (`cqlsh`) in the Connect section; the password is never part of the command

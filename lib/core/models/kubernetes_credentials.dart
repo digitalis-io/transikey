@@ -42,7 +42,12 @@ class KubernetesRoleInfo {
   /// `kubernetes_role_type`: `Role` or `ClusterRole`.
   final String roleType;
 
+  /// Allowed namespaces the user can pick from: named ones, no wildcard.
+  List<String> get namespaceChoices => [
+    for (final n in allowedNamespaces)
+      if (n.trim().isNotEmpty && n.trim() != '*') n.trim(),
+  ];
+
   /// First namespace that names one namespace, not a wildcard.
-  String? get suggestedNamespace =>
-      allowedNamespaces.where((n) => n.isNotEmpty && n != '*').firstOrNull;
+  String? get suggestedNamespace => namespaceChoices.firstOrNull;
 }

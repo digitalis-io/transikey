@@ -391,7 +391,12 @@ void main() {
         'kubernetes',
         'developer',
       );
-      expect(info.suggestedNamespace, namespace);
+      // The server may reorder the list: the first one is suggested.
+      expect(
+        info.namespaceChoices,
+        unorderedEquals([namespace, 'transikey-sandbox']),
+      );
+      expect(info.suggestedNamespace, info.namespaceChoices.first);
       expect(info.roleType, 'Role');
     });
 
@@ -408,6 +413,17 @@ void main() {
       expect(creds.serviceAccountName, isNotEmpty);
       expect(creds.serviceAccountNamespace, namespace);
       expect(creds.lease.leaseDuration, const Duration(minutes: 15));
+    });
+
+    test('a token is issued for the second allowed namespace', () async {
+      await signInAsUser();
+      final creds = await client.getKubernetesCredentials(
+        'kubernetes',
+        'developer',
+        namespace: 'transikey-sandbox',
+      );
+      revokeAfterTest(creds.lease.leaseId);
+      expect(creds.serviceAccountNamespace, 'transikey-sandbox');
     });
 
     test('a namespace outside the role is refused', () async {
@@ -453,7 +469,11 @@ void main() {
       final path = '${dir.path}/kubeconfig.yaml';
       await writePrivateFile(
         path,
-        kubeconfigYaml(creds, server: apiServer, caPath: ca.absolute.path),
+        kubeconfigYaml(
+          creds,
+          server: apiServer,
+          caPem: await readCaCertificate(ca.absolute.path),
+        ),
       );
       final result = await Process.run(
         'kubectl',

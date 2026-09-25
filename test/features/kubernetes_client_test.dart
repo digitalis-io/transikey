@@ -148,6 +148,23 @@ void main() {
       expect(info.suggestedNamespace, 'team-a');
     });
 
+    test(
+      'several namespaces are offered as choices, wildcard left out',
+      () async {
+        answer({
+          'data': {
+            'allowed_kubernetes_namespaces': ['team-a', '*', ' team-b ', ''],
+          },
+        });
+        final info = await client.describeKubernetesRole(
+          'kubernetes',
+          'viewer',
+        );
+        expect(info.namespaceChoices, ['team-a', 'team-b']);
+        expect(info.suggestedNamespace, 'team-a');
+      },
+    );
+
     test('a wildcard alone suggests no namespace', () async {
       answer({
         'data': {

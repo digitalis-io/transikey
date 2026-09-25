@@ -20,6 +20,25 @@ class KubernetesWorld {
   /// Mount path -> engine type, as the server reveals them.
   static late Map<String, String> mounts;
 
+  /// CA files the fake disk holds: path -> PEM.
+  static const caFiles = {
+    '/etc/k8s/ca.crt':
+        '-----BEGIN CERTIFICATE-----\nMIIBtest\n-----END CERTIFICATE-----',
+  };
+
+  /// Reads [caFiles]; any other path fails like an unreadable file.
+  static Future<String> readCa(String path) async {
+    if (path.isEmpty) return '';
+    final pem = caFiles[path];
+    if (pem == null) {
+      throw FormatException('Cannot read the CA certificate: $path');
+    }
+    return pem;
+  }
+
   /// `cluster_role_binding` of the last token request.
   static bool? lastClusterRoleBinding;
+
+  /// Namespace of the last token the server issued.
+  static String? lastNamespace;
 }

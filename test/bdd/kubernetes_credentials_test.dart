@@ -10,6 +10,8 @@ import './step/i_pick_the_role.dart';
 import './step/i_request_a_kubernetes_token.dart';
 import './step/i_see_the_text.dart';
 import './step/the_service_account_is_bound_within_its_namespace.dart';
+import './step/i_choose_the_namespace.dart';
+import './step/the_token_is_issued_for_the_namespace.dart';
 import './step/i_cannot_request_a_kubernetes_token.dart';
 import './step/i_enter_the_namespace.dart';
 import './step/i_ask_for_a_clusterwide_binding.dart';
@@ -19,6 +21,7 @@ import './step/i_set_the_cluster_address_with_the_ca.dart';
 import './step/i_copy_the_kubeconfig.dart';
 import './step/the_copied_kubeconfig_points_at_with_the_ca.dart';
 import './step/the_copied_kubeconfig_holds_the_token_for_the_namespace.dart';
+import './step/nothing_has_been_copied.dart';
 import './step/i_cannot_copy_the_kubeconfig.dart';
 import './step/i_clear_the_credentials_from_the_screen.dart';
 import './step/the_kubernetes_mount_offers_the_role.dart';
@@ -47,7 +50,17 @@ void main() {
       await theKubernetesAccessScreenIsOpen(tester);
       await iPickTheRole(tester, 'developer');
       await iSeeTheText(tester, 'team-a');
-      await iSeeTheText(tester, 'Allowed: team-a');
+      await iSeeTheText(tester, 'Allowed: team-a, team-b');
+    });
+    testWidgets('''One of several allowed namespaces is picked''', (
+      tester,
+    ) async {
+      await bddSetUp(tester);
+      await theKubernetesAccessScreenIsOpen(tester);
+      await iPickTheRole(tester, 'developer');
+      await iChooseTheNamespace(tester, 'team-b');
+      await iRequestAKubernetesToken(tester);
+      await theTokenIsIssuedForTheNamespace(tester, 'team-b');
     });
     testWidgets(
       '''The namespace is filled in again when coming back to a role''',
@@ -111,6 +124,26 @@ void main() {
       );
       await theCopiedKubeconfigHoldsTheTokenForTheNamespace(tester, 'team-a');
     });
+    testWidgets(
+      '''A CA certificate that cannot be read stops the kubeconfig''',
+      (tester) async {
+        await bddSetUp(tester);
+        await theKubernetesAccessScreenIsOpen(tester);
+        await iPickTheRole(tester, 'developer');
+        await iRequestAKubernetesToken(tester);
+        await iSetTheClusterAddressWithTheCa(
+          tester,
+          'https://k8s.test:6443',
+          '/etc/k8s/missing.crt',
+        );
+        await iCopyTheKubeconfig(tester);
+        await iSeeTheText(
+          tester,
+          'Cannot read the CA certificate: /etc/k8s/missing.crt',
+        );
+        await nothingHasBeenCopied(tester);
+      },
+    );
     testWidgets('''The kubeconfig cannot be made without a cluster address''', (
       tester,
     ) async {

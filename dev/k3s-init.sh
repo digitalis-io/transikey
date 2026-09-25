@@ -1,6 +1,7 @@
 #!/bin/sh
 # Prepares the dev k3s cluster for the OpenBao Kubernetes secrets engine:
-#   - namespace transikey-test, where the engine creates service accounts
+#   - namespaces transikey-test and transikey-sandbox, where the engine
+#     creates service accounts
 #   - service account openbao/kube-system with the rights the engine needs
 #   - a long-lived token for that service account
 # Writes the token and the cluster CA to $OUT_DIR for dev/init.sh.
@@ -33,6 +34,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: $DEV_K8S_NAMESPACE
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: transikey-sandbox
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -83,7 +89,7 @@ metadata:
     kubernetes.io/service-account.name: openbao
 type: kubernetes.io/service-account-token
 YAML
-log "namespace $DEV_K8S_NAMESPACE and service account openbao ready"
+log "namespaces $DEV_K8S_NAMESPACE, transikey-sandbox and service account openbao ready"
 
 # The token controller fills the secret asynchronously.
 tries=0

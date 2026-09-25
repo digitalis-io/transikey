@@ -69,6 +69,7 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
         ? null
         : ref.watch(kubernetesRoleInfoProvider(selected));
     final allowed = info?.value?.allowedNamespaces ?? const [];
+    final choices = info?.value?.namespaceChoices ?? const <String>[];
     final severalMounts = (groups.value?.length ?? 0) > 1;
     final label = selected == null
         ? null
@@ -140,6 +141,24 @@ class _KubernetesScreenState extends ConsumerState<KubernetesScreen> {
                   ),
                 ],
               ),
+              // A role may allow several namespaces; a token is for one.
+              if (choices.length > 1)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final n in choices)
+                        ChoiceChip(
+                          label: Text(n),
+                          selected: _namespace.text.trim() == n,
+                          onSelected: (_) =>
+                              setState(() => _namespace.text = n),
+                        ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed:
