@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/auth/domain/vault_session.dart';
 import '../../features/auth/presentation/session_provider.dart';
 import '../../features/database/presentation/database_provider.dart';
+import '../../features/kubernetes/presentation/kubernetes_provider.dart';
 import '../../features/leases/presentation/leases_provider.dart';
 import '../../features/sharing/presentation/sharing_provider.dart';
 import '../../features/ssh/presentation/ssh_provider.dart';
@@ -15,6 +16,9 @@ final sessionCleanupProvider = Provider<void>((ref) {
     ref.invalidate(databaseCredentialsProvider);
     ref.invalidate(databaseRolesProvider);
     ref.invalidate(detectedDatabaseProvider);
+    ref.invalidate(kubernetesCredentialsProvider);
+    ref.invalidate(kubernetesRolesProvider);
+    ref.invalidate(kubernetesRoleInfoProvider);
     ref.invalidate(sshCredentialsProvider);
     ref.invalidate(sshRolesProvider);
     ref.invalidate(secretSharingProvider);

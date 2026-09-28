@@ -10,7 +10,7 @@
 
 # Transikey
 
-Desktop client for [OpenBao](https://openbao.org) and HashiCorp Vault: sign in, request short-lived database and SSH credentials, and share secrets once, without the CLI.
+Desktop client for [OpenBao](https://openbao.org) and HashiCorp Vault: sign in, request short-lived database, SSH and Kubernetes credentials, and share secrets once, without the CLI.
 
 One Flutter codebase for macOS 13+, Windows 11+ and Linux (Ubuntu 22.04+). Built and tested on macOS so far; Windows and Linux are scaffolded but untested. Works with Vault OSS, Vault Enterprise (namespaces) and OpenBao, which share the same HTTP API.
 
@@ -93,7 +93,7 @@ You need [Flutter](https://docs.flutter.dev/get-started/install) 3.32 or newer a
 ```bash
 git clone git@github.com:digitalis-io/transikey.git && cd transikey
 make gen        # fetch packages, generate Freezed / JSON code
-make dev-up     # OpenBao (dev mode), PostgreSQL, OpenLDAP, SSH target; fully configured
+make dev-up     # OpenBao (dev mode), PostgreSQL, OpenLDAP, SSH target, k3s; fully configured
 make run        # start the app
 ```
 
@@ -149,7 +149,7 @@ Run `make help` for every task.
 
 ### 2. Hand a secret to a colleague, once
 
-1. Open **Secret Sharing** (`Cmd/Ctrl+4`), tab **Wrap**.
+1. Open **Secret Sharing** (`Cmd/Ctrl+5`), tab **Wrap**.
 2. Paste text or a JSON object, choose a time to live, **Wrap secret**.
 3. Press **Copy share link** and send the link over any channel. It works one time, then it is void:
 
@@ -201,6 +201,33 @@ One-time password:
    SSHPASS='<otp>' sshpass -e ssh -p 2222 -o PreferredAuthentications=keyboard-interactive -o PubkeyAuthentication=no 'ubuntu@127.0.0.1'
    ```
 
+### 4. Get a Kubernetes service account token and kubeconfig
+
+The dev stack includes a single-node k3s cluster (API `https://127.0.0.1:6443`) wired to the OpenBao Kubernetes secrets engine. Role `developer` issues tokens for the `transikey-test` or `transikey-sandbox` namespace; role `viewer` is a ClusterRole role that also accepts a cluster-wide binding.
+
+1. Open **Kubernetes Access** (`Cmd/Ctrl+4`) and pick the `developer` role. Roles of every Kubernetes mount are listed, grouped by mount.
+2. Choose one or more **Namespaces**. The list under the field holds the namespaces you used before with this role (marked with a clock), then the ones the role allows; tick several, and typing filters the list, so a role with hundreds of namespaces stays one field. Type a name and press Enter to add one that is not listed. Chosen namespaces show as chips; remove one with its cross. The last namespace you used, else the first one the role allows, is chosen for you. At most 10 at once. The helper line says what the role accepts: a short list, a count, `Any namespace`, or the labels of `allowed_kubernetes_namespace_selector`.
+
+   The app can only list allowed namespaces when your policy lets it read the role (optional path below) and the role names them. For a wildcard or a label selector only the cluster knows the namespaces: type one once, and it is offered again next time. A namespace the server refused is not remembered. **TTL** is optional (Kubernetes refuses less than `10m`). Tick **Cluster-wide binding** only for a ClusterRole role.
+   The engine binds a service account to **one** namespace: `allowed_kubernetes_namespaces` lists the namespaces a request may name, not a set one token covers. Several namespaces therefore mean one request and one token each. For one token that works in every namespace, use a ClusterRole role with **Cluster-wide binding**.
+3. **Request token for developer**. The card shows, per namespace, the service account, the masked token and the lease countdown. A namespace the role does not allow is listed with the server's reason while the others are issued; when every namespace is refused the card stays empty. **Revoke all** ends every token of the card.
+4. In **Connect**, type the **API server URL** and, optionally, the **CA certificate path** once per mount. Vault does not return them, so they are remembered for that mount and survive role switches. The CA path must be absolute (`~/` works). For the dev stack: `https://127.0.0.1:6443` and the full path to `dev/k3s-ca.crt` in your checkout (written by `make dev-up`, or run `make dev-k3s-ca`).
+5. **Copy kubeconfig** (clipboard clears like any secret) or **Save kubeconfig**. The CA certificate is embedded in the kubeconfig (`certificate-authority-data`), so the file works from any directory or machine; a CA file that cannot be read stops the kubeconfig with a message instead. The kubeconfig has one context per namespace (`transikey-<mount>-<role>-<namespace>`), each with its own token; the first is the current context. Switch with `--context` or `kubectl config use-context`: `-n` alone keeps the first namespace's token and is refused elsewhere. A saved file is readable by you only (`0600` on macOS and Linux). A copied kubeconfig that you paste into a file gets your shell's default permissions: prefer **Save**. After saving, the card offers one command per namespace:
+
+   ```bash
+   KUBECONFIG='/Users/me/.kube/kubeconfig-kubernetes-developer.yaml' kubectl --context 'transikey-kubernetes-developer-transikey-test' get pods -n 'transikey-test'
+   ```
+
+   The token stays in the file, never in the command line. It keeps working until the lease ends; delete the file when you are done.
+
+Policy the app needs for a mount called `kubernetes` (the last path is optional and only pre-fills the namespace):
+
+```hcl
+path "kubernetes/roles"   { capabilities = ["list"] }
+path "kubernetes/creds/*" { capabilities = ["update"] }
+path "kubernetes/roles/*" { capabilities = ["read"] }
+```
+
 ## Configuration reference
 
 All settings live in **Settings** (`Cmd/Ctrl+,`) and are stored in the OS keystore (Keychain, DPAPI or libsecret).
@@ -222,6 +249,7 @@ All settings live in **Settings** (`Cmd/Ctrl+,`) and are stored in the OS keysto
 | AppRole mount | path | `approle` | `approle-ci` |
 | LDAP mount | path | `ldap` | `ldap-corp` |
 | OIDC mount | path | `oidc` | `okta` |
+| Kubernetes mount | comma separated paths, used only when the server does not list its mounts | `kubernetes` | `k8s-prod, k8s-dev` |
 | Database client (Connect section) | `psql` / `mysql` / `cqlsh` | `psql` | `cqlsh` |
 | Database host | string | `127.0.0.1` | `pg.internal.example.com` |
 | Database port | integer | `5432` | `3306` |
@@ -230,8 +258,10 @@ All settings live in **Settings** (`Cmd/Ctrl+,`) and are stored in the OS keysto
 | SSH host | string | `127.0.0.1` | `bastion.example.com` |
 | SSH port | integer | `2222` | `22` |
 | SSH private key path | path | `~/.ssh/id_ed25519` | `~/.ssh/work_ed25519` |
+| Kubernetes API server URL (Connect section) | URL, per mount | empty | `https://k8s.example.com:6443` |
+| Kubernetes CA certificate path | absolute path, per mount; its certificate is embedded in the kubeconfig; empty uses the system trust store | empty | `~/.kube/prod-ca.crt` |
 
-The Database and SSH rows are edited in the **Connect** section of their screens, not under Settings; the defaults match the dev stack. Database values are kept per mount (per connection when the server reveals it); the defaults apply to a mount you have not edited yet.
+The Database, SSH and Kubernetes Connect rows are edited in the **Connect** section of their screens, not under Settings; the defaults match the dev stack. Database values are kept per mount (per connection when the server reveals it); the defaults apply to a mount you have not edited yet.
 
 Dev stack environment variables. Set them in the shell before `make dev-up`:
 
@@ -246,6 +276,8 @@ Dev stack environment variables. Set them in the shell before `make dev-up`:
 | `DEV_LDAP_USER` / `DEV_LDAP_USER_PASSWORD` | `ldapdemo` / `transikey-dev` | `DEV_LDAP_USER=bob` |
 | `DEV_LDAP_ADMIN_PASSWORD` | `transikey-dev` | `DEV_LDAP_ADMIN_PASSWORD=local-only` |
 | `DEV_SSHD_PORT` / `DEV_SSHD_IP` | `2222` / `172.30.0.10` | `DEV_SSHD_PORT=2200` |
+| `DEV_K3S_PORT` / `DEV_K3S_IMAGE` | `6443` / `rancher/k3s:v1.31.4-k3s1` | `DEV_K3S_PORT=6444` |
+| `DEV_K8S_NAMESPACE` | `transikey-test` | `DEV_K8S_NAMESPACE=sandbox` |
 | `DEV_SUBNET` | `172.30.0.0/24` | `DEV_SUBNET=10.99.0.0/24` (keep `DEV_SSHD_IP` inside it) |
 
 The dev stack is for local testing only: dev mode keeps data in memory, uses a fixed root token and binds to `127.0.0.1`.
@@ -257,8 +289,8 @@ Work with several servers? Save each one as a profile and pick it from the **Ser
 | A profile remembers | A profile never stores |
 |---------------------|------------------------|
 | Name and colour tag, address, namespace, TLS verification, custom CA | Tokens |
-| The six mount paths | Passwords, secret IDs |
-| Database and SSH **Connect** targets | Issued credentials or leases |
+| The seven mount paths | Passwords, secret IDs |
+| Database, SSH and Kubernetes **Connect** targets | Issued credentials or leases |
 | Last sign-in method and username | |
 
 1. Sign in to a server, then **Save server profile** (session card or **Settings → Server profiles**). Name it, for example `prod`, and give it a colour tag such as red.
@@ -292,7 +324,7 @@ An app started from Finder, the Start menu or a desktop launcher does not see va
 
 | Shortcut (`Cmd` on macOS, `Ctrl` elsewhere) | Action |
 |----------|--------|
-| `+1` … `+6` | Authentication, Database Credentials, SSH Access, Secret Sharing, Lease Management, Settings |
+| `+1` … `+7` | Authentication, Database Credentials, SSH Access, Kubernetes Access, Secret Sharing, Lease Management, Settings |
 | `+B` | Collapse or expand the sidebar |
 | `+L` | Lock the session |
 | `+,` | Settings |
@@ -311,7 +343,7 @@ An app started from Finder, the Start menu or a desktop launcher does not see va
 lib/
 ├── app/        bootstrap, providers, routing, navigation shell
 ├── core/       api (VaultApiClient, Dio), errors, models, security, theme, utils, widgets
-└── features/   auth, database, ssh, sharing, leases, settings
+└── features/   auth, database, ssh, kubernetes, sharing, leases, settings
                 each with domain/ (contracts), data/ (repositories), presentation/ (Riverpod + UI)
 ```
 

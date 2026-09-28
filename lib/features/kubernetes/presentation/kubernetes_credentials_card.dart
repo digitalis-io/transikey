@@ -1,0 +1,328 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../app/providers/clipboard_actions.dart';
+import '../../../core/errors/vault_exception.dart';
+import '../../../core/models/kubernetes_credentials.dart';
+import '../../../core/utils/home_paths.dart';
+import '../../../core/utils/kubeconfig.dart';
+import '../../../core/utils/private_file.dart';
+import '../../../core/widgets/secret_field.dart';
+import '../../leases/presentation/lease_countdown.dart';
+import '../../settings/domain/server_profile.dart';
+import '../../settings/presentation/settings_provider.dart';
+import 'kubernetes_provider.dart';
+
+/// Picks where to save a kubeconfig. Null when the user cancels. Tests
+/// replace it: native dialogs do not run under `flutter test`.
+final kubeconfigSaveLocationProvider =
+    Provider<Future<String?> Function(String fileName)>(
+      (ref) =>
+          (fileName) => FilePicker.saveFile(
+            dialogTitle: 'Save kubeconfig',
+            fileName: fileName,
+            // ~/.kube is hidden in native dialogs: start inside it.
+            initialDirectory: existingKubeDirectory(),
+          ),
+    );
+
+/// Reads the CA certificate named in the Connect section. Tests replace
+/// it: real file reads do not complete inside widget tests.
+final kubeCaReaderProvider = Provider<Future<String> Function(String path)>(
+  (ref) => readCaCertificate,
+);
+
+/// Issued tokens of one role, one section per namespace, titled
+/// `mount/role`. Namespaces the server refused are listed with the reason.
+class KubernetesCredentialsCard extends ConsumerWidget {
+  const KubernetesCredentialsCard(this.result, {super.key});
+
+  final KubernetesTokenSet result;
+
+  Future<void> _revokeAll(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(kubernetesCredentialsProvider.notifier).revokeAll();
+    } on VaultException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void copy(String v) => copySecret(context, ref, v);
+    SecretField plain(String label, String value) =>
+        SecretField(label: label, value: value, sensitive: false, onCopy: copy);
+    final theme = Theme.of(context);
+    final r = result;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(r.key, style: theme.textTheme.titleMedium),
+            for (final c in r.tokens) ...[
+              const SizedBox(height: 12),
+              Text(
+                c.serviceAccountNamespace,
+                style: theme.textTheme.titleSmall,
+              ),
+              plain('Service account', c.serviceAccountName),
+              SecretField(
+                label: 'Token',
+                value: c.serviceAccountToken,
+                multiline: true,
+                onCopy: copy,
+              ),
+              plain('Lease ID', c.lease.leaseId),
+              plain('Lease duration', '${c.lease.leaseDuration.inSeconds}s'),
+              const SizedBox(height: 4),
+              LeaseCountdown(leaseId: c.lease.leaseId),
+            ],
+            for (final f in r.failures.entries)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '${f.key}: ${f.value}',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
+            const Divider(height: 24),
+            // New tokens must not reuse the file saved for the old ones.
+            _ConnectSection(key: ObjectKey(r), tokens: r.tokens),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: ref
+                      .read(kubernetesCredentialsProvider.notifier)
+                      .clear,
+                  icon: const Icon(Icons.visibility_off),
+                  label: const Text('Clear from screen'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _revokeAll(context, ref),
+                  icon: const Icon(Icons.block),
+                  label: Text(r.tokens.length > 1 ? 'Revoke all' : 'Revoke'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One kubeconfig for all tokens, one context each. Vault does not return the API server, so the
+/// address and CA are typed once per mount and remembered.
+class _ConnectSection extends ConsumerStatefulWidget {
+  const _ConnectSection({super.key, required this.tokens});
+
+  final List<KubernetesCredentials> tokens;
+
+  @override
+  ConsumerState<_ConnectSection> createState() => _ConnectSectionState();
+}
+
+class _ConnectSectionState extends ConsumerState<_ConnectSection> {
+  String get _mount => widget.tokens.first.mount;
+
+  late final SavedKubeTarget _initial =
+      ref.read(settingsProvider).value?.kubernetesTargets[_mount] ??
+      const SavedKubeTarget();
+  late final _server = TextEditingController(text: _initial.server);
+  late final _caPath = TextEditingController(text: _initial.caPath);
+  // Held on to: dispose may still save, and ref is gone by then.
+  late final SettingsNotifier _settings;
+  Timer? _debounce;
+  String? _savedPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _settings = ref.read(settingsProvider.notifier);
+  }
+
+  @override
+  void dispose() {
+    // Keep what was typed even when the card goes before the pause ends.
+    if (_debounce?.isActive ?? false) {
+      _debounce!.cancel();
+      _persist();
+    }
+    _server.dispose();
+    _caPath.dispose();
+    super.dispose();
+  }
+
+  SavedKubeTarget get _target =>
+      SavedKubeTarget(server: _server.text.trim(), caPath: _caPath.text.trim());
+
+  bool get _serverValid {
+    final uri = Uri.tryParse(_target.server);
+    return uri != null &&
+        (uri.scheme == 'https' || uri.scheme == 'http') &&
+        uri.host.isNotEmpty;
+  }
+
+  /// The kubeconfig, or null after telling the user why the CA could not
+  /// be embedded. A kubeconfig without its CA would fail later, in kubectl.
+  Future<String?> _kubeconfig() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final target = _target;
+    try {
+      final pem = await ref.read(kubeCaReaderProvider)(target.caPath);
+      return kubeconfigYaml(widget.tokens, server: target.server, caPem: pem);
+    } on FormatException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      return null;
+    }
+  }
+
+  Future<void> _copy() async {
+    final yaml = await _kubeconfig();
+    if (yaml == null || !mounted) return;
+    await copySecret(context, ref, yaml);
+  }
+
+  void _persist() {
+    final target = _target;
+    _settings.change(
+      (s) => s.copyWith(
+        kubernetesTargets: {...s.kubernetesTargets, _mount: target},
+      ),
+    );
+  }
+
+  /// Every save rewrites the settings in the OS keystore: wait for a pause
+  /// in typing instead of saving per keystroke.
+  void _changed() {
+    setState(() => _savedPath = null);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _persist);
+  }
+
+  Future<void> _pickCa() async {
+    final picked = await FilePicker.pickFiles(
+      dialogTitle: 'Select cluster CA certificate',
+      initialDirectory: existingKubeDirectory(),
+    );
+    final path = picked?.files.single.path;
+    if (path == null) return;
+    _caPath.text = path;
+    _changed();
+  }
+
+  Future<void> _save() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final c = widget.tokens.first;
+    final yaml = await _kubeconfig();
+    if (yaml == null) return;
+    final path = await ref.read(kubeconfigSaveLocationProvider)(
+      'kubeconfig-${c.mount}-${c.role}.yaml'.replaceAll('/', '-'),
+    );
+    if (path == null) return;
+    try {
+      await writePrivateFile(path, yaml);
+    } on FileSystemException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not save: ${e.message}')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _savedPath = path);
+    messenger.showSnackBar(SnackBar(content: Text('Saved to $path')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final savedPath = _savedPath;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Connect', style: theme.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 280,
+              child: TextField(
+                controller: _server,
+                decoration: const InputDecoration(
+                  labelText: 'API server URL',
+                  hintText: 'https://k8s.example.com:6443',
+                ),
+                onChanged: (_) => _changed(),
+              ),
+            ),
+            SizedBox(
+              width: 280,
+              child: TextField(
+                controller: _caPath,
+                decoration: InputDecoration(
+                  labelText: 'CA certificate path (optional)',
+                  suffixIcon: IconButton(
+                    tooltip: 'Choose file',
+                    icon: const Icon(Icons.folder_open),
+                    onPressed: _pickCa,
+                  ),
+                ),
+                onChanged: (_) => _changed(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _serverValid ? _copy : null,
+              icon: const Icon(Icons.copy),
+              label: const Text('Copy kubeconfig'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _serverValid ? _save : null,
+              icon: const Icon(Icons.save_alt),
+              label: const Text('Save kubeconfig'),
+            ),
+          ],
+        ),
+        if (!_serverValid)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Enter the API server URL (https://…) first.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        if (savedPath != null) ...[
+          const SizedBox(height: 8),
+          for (final t in widget.tokens)
+            SecretField(
+              label: widget.tokens.length > 1
+                  ? 'kubectl · ${t.serviceAccountNamespace}'
+                  : 'kubectl command',
+              value: kubectlCommand(savedPath, t),
+              sensitive: false,
+              multiline: true,
+              onCopy: (v) => copySecret(context, ref, v),
+            ),
+        ],
+      ],
+    );
+  }
+}

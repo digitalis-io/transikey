@@ -46,3 +46,6 @@ android/
 ios/
 test/widget_test.dart
 web/
+
+# Dev k3s cluster CA (make dev-k3s-ca)
+dev/k3s-ca.crt

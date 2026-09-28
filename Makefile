@@ -76,10 +76,11 @@ build-windows: ## Release build for Windows (needs a Windows host)
 # --- dev stack: OpenBao + PostgreSQL ------------------------------------------
 
 .PHONY: dev-up
-dev-up: ## Start OpenBao (dev mode), PostgreSQL, OpenLDAP and an SSH target, then configure them
-	$(COMPOSE) up -d --wait openbao postgres openldap
+dev-up: ## Start OpenBao (dev mode), PostgreSQL, OpenLDAP, k3s and an SSH target, then configure them
+	$(COMPOSE) up -d --wait openbao postgres openldap k3s
 	$(COMPOSE) up init
 	$(COMPOSE) up -d --build sshd
+	@$(MAKE) --no-print-directory dev-k3s-ca
 
 .PHONY: dev-down
 dev-down: ## Stop the dev stack and delete its data
@@ -95,6 +96,11 @@ dev-logs: ## Follow dev stack logs
 .PHONY: dev-status
 dev-status: ## Show dev stack containers
 	$(COMPOSE) ps
+
+.PHONY: dev-k3s-ca
+dev-k3s-ca: ## Write the dev k3s cluster CA to dev/k3s-ca.crt (for the Kubernetes Connect section)
+	@$(COMPOSE) exec -T k3s cat /output/ca.crt > dev/k3s-ca.crt.tmp && mv dev/k3s-ca.crt.tmp dev/k3s-ca.crt || { rm -f dev/k3s-ca.crt.tmp; exit 1; }
+	@echo "k3s CA written to dev/k3s-ca.crt"
 
 .PHONY: dev-approle
 # Prints a secret_id to the terminal on purpose: dev stack only, in-memory server.

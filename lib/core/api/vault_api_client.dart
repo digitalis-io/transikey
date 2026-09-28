@@ -2,6 +2,7 @@ import '../models/auth_response.dart';
 import '../models/database_credentials.dart';
 import '../utils/db_target_detection.dart';
 import '../models/health_status.dart';
+import '../models/kubernetes_credentials.dart';
 import '../models/lease_info.dart';
 import '../models/ssh_credentials.dart';
 import '../models/wrapped_secret.dart';
@@ -56,6 +57,23 @@ abstract class VaultApiClient {
   Future<DetectedDatabase> describeDatabaseRole(String mount, String role);
 
   Future<DatabaseCredentials> getDatabaseCredentials(String mount, String role);
+
+  // --- kubernetes ---------------------------------------------------------
+  Future<List<String>> listKubernetesRoles(String mount);
+
+  /// Allowed namespaces and role type of [role]. Least-privilege tokens may
+  /// not read the role: that surfaces as a [PermissionDeniedException].
+  Future<KubernetesRoleInfo> describeKubernetesRole(String mount, String role);
+
+  /// Service account token for [namespace]. [ttl] is a Vault duration
+  /// (`30m`, `3600`); null or empty uses the role default.
+  Future<KubernetesCredentials> getKubernetesCredentials(
+    String mount,
+    String role, {
+    required String namespace,
+    String? ttl,
+    bool clusterRoleBinding = false,
+  });
 
   // --- leases -------------------------------------------------------------
   Future<LeaseInfo> renewLease(String leaseId, {Duration? increment});

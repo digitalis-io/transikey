@@ -31,6 +31,7 @@ abstract class AppSettings with _$AppSettings {
     @Default('approle') String approleMount,
     @Default('ldap') String ldapMount,
     @Default('oidc') String oidcMount,
+    @Default('kubernetes') String kubernetesMount,
     @Default('psql') String databaseClient,
     @Default('127.0.0.1') String databaseHost,
     @Default(5432) int databasePort,
@@ -39,6 +40,13 @@ abstract class AppSettings with _$AppSettings {
     /// Connect targets keyed by `mount` or `mount/connection`. The four
     /// fields above are the default for a key that is not in here.
     @Default({}) Map<String, SavedDbTarget> databaseTargets,
+
+    /// Kubernetes API servers keyed by mount.
+    @Default({}) Map<String, SavedKubeTarget> kubernetesTargets,
+
+    /// Namespaces used with each Kubernetes role, keyed `mount/role`, most
+    /// recent first. Names only; offered again when the role cannot tell.
+    @Default({}) Map<String, List<String>> kubernetesRecentNamespaces,
     @Default('ubuntu') String sshUser,
     @Default('127.0.0.1') String sshHost,
     @Default(2222) int sshPort,
@@ -80,11 +88,14 @@ abstract class AppSettings with _$AppSettings {
     approleMount: approleMount,
     ldapMount: ldapMount,
     oidcMount: oidcMount,
+    kubernetesMount: kubernetesMount,
     databaseClient: databaseClient,
     databaseHost: databaseHost,
     databasePort: databasePort,
     databaseName: databaseName,
     databaseTargets: databaseTargets,
+    kubernetesTargets: kubernetesTargets,
+    kubernetesRecentNamespaces: kubernetesRecentNamespaces,
     sshUser: sshUser,
     sshHost: sshHost,
     sshPort: sshPort,
@@ -107,11 +118,14 @@ abstract class AppSettings with _$AppSettings {
     approleMount: p.approleMount,
     ldapMount: p.ldapMount,
     oidcMount: p.oidcMount,
+    kubernetesMount: p.kubernetesMount,
     databaseClient: p.databaseClient,
     databaseHost: p.databaseHost,
     databasePort: p.databasePort,
     databaseName: p.databaseName,
     databaseTargets: p.databaseTargets,
+    kubernetesTargets: p.kubernetesTargets,
+    kubernetesRecentNamespaces: p.kubernetesRecentNamespaces,
     sshUser: p.sshUser,
     sshHost: p.sshHost,
     sshPort: p.sshPort,
@@ -119,6 +133,27 @@ abstract class AppSettings with _$AppSettings {
     lastAuthMethod: p.lastAuthMethod,
     lastUsername: p.lastUsername,
   );
+
+  /// How many namespaces are remembered per Kubernetes role.
+  static const recentNamespaceLimit = 10;
+
+  /// Remembers [namespace] as the most recent one used with [roleKey].
+  AppSettings withRecentNamespace(String roleKey, String namespace) {
+    final clean = namespace.trim();
+    if (clean.isEmpty) return this;
+    final previous = kubernetesRecentNamespaces[roleKey] ?? const [];
+    final updated = [
+      clean,
+      for (final n in previous)
+        if (n != clean) n,
+    ].take(recentNamespaceLimit).toList();
+    return copyWith(
+      kubernetesRecentNamespaces: {
+        ...kubernetesRecentNamespaces,
+        roleKey: updated,
+      },
+    );
+  }
 
   /// Writes the current server scoped fields back into the active profile.
   AppSettings syncActiveProfile() {
@@ -153,12 +188,19 @@ abstract class AppSettings with _$AppSettings {
 
   /// Database mounts to use when the server does not reveal them. The
   /// setting is a comma separated list.
-  List<String> get databaseMountList {
+  List<String> get databaseMountList => _mountList(databaseMount, 'database');
+
+  /// Kubernetes mounts to use when the server does not reveal them. The
+  /// setting is a comma separated list.
+  List<String> get kubernetesMountList =>
+      _mountList(kubernetesMount, 'kubernetes');
+
+  static List<String> _mountList(String setting, String fallback) {
     final mounts = {
-      for (final m in databaseMount.split(','))
-        if (m.trim().isNotEmpty) _mount(m, 'database'),
+      for (final m in setting.split(','))
+        if (m.trim().isNotEmpty) _mount(m, fallback),
     };
-    return mounts.isEmpty ? const ['database'] : mounts.toList();
+    return mounts.isEmpty ? [fallback] : mounts.toList();
   }
 
   static String _mount(String value, String fallback) {

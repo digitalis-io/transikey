@@ -5,6 +5,7 @@ import '../models/auth_response.dart';
 import '../models/database_credentials.dart';
 import '../utils/db_target_detection.dart';
 import '../models/health_status.dart';
+import '../models/kubernetes_credentials.dart';
 import '../models/lease_info.dart';
 import '../models/ssh_credentials.dart';
 import '../models/vault_envelope.dart';
@@ -230,6 +231,66 @@ class DioVaultApiClient implements VaultApiClient {
       role: role,
       username: data['username'] as String? ?? '',
       password: data['password'] as String? ?? '',
+      lease: _leaseFrom(envelope),
+    );
+  });
+
+  // --- kubernetes ---------------------------------------------------------
+
+  @override
+  Future<List<String>> listKubernetesRoles(String mount) =>
+      _guard(() => _list('/v1/${_path(mount)}/roles'));
+
+  @override
+  Future<KubernetesRoleInfo> describeKubernetesRole(
+    String mount,
+    String role,
+  ) => _guard(() async {
+    final data =
+        (await _request(
+          'GET',
+          '/v1/${_path(mount)}/roles/${_segment(role, 'Role')}',
+        )).data ??
+        const {};
+    final allowed = data['allowed_kubernetes_namespaces'];
+    return KubernetesRoleInfo(
+      allowedNamespaces: allowed is List
+          ? [for (final n in allowed) '$n']
+          : const [],
+      roleType: '${data['kubernetes_role_type'] ?? ''}',
+      namespaceSelector:
+          '${data['allowed_kubernetes_namespace_selector'] ?? ''}'.trim(),
+    );
+  });
+
+  @override
+  Future<KubernetesCredentials> getKubernetesCredentials(
+    String mount,
+    String role, {
+    required String namespace,
+    String? ttl,
+    bool clusterRoleBinding = false,
+  }) => _guard(() async {
+    if (namespace.trim().isEmpty) {
+      throw const ValidationException('Namespace is required.');
+    }
+    final envelope = await _request(
+      'POST',
+      '/v1/${_path(mount)}/creds/${_segment(role, 'Role')}',
+      data: {
+        'kubernetes_namespace': namespace.trim(),
+        if (ttl != null && ttl.trim().isNotEmpty) 'ttl': ttl.trim(),
+        if (clusterRoleBinding) 'cluster_role_binding': true,
+      },
+    );
+    final data = envelope.data ?? const {};
+    return KubernetesCredentials(
+      mount: mount,
+      role: role,
+      serviceAccountToken: data['service_account_token'] as String? ?? '',
+      serviceAccountName: data['service_account_name'] as String? ?? '',
+      serviceAccountNamespace:
+          data['service_account_namespace'] as String? ?? namespace.trim(),
       lease: _leaseFrom(envelope),
     );
   });

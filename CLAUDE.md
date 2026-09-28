@@ -7,7 +7,7 @@ Transikey: Flutter desktop client (macOS, Windows, Linux) for OpenBao and HashiC
 Scaffolded with `--type other`: no stack-specific bootstrap plugin exists for Flutter.
 
 ## Current Status
-- **Last Updated**: 2026-09-18
+- **Last Updated**: 2026-09-25
 - **Current Phase**: Development
 - **Health**: Green
 
@@ -21,6 +21,7 @@ Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from th
 - Commit `f7c433e` lacks `Signed-off-by` and a Conventional Commit subject; amend before merge if DCO is enforced.
 
 ## Recent Progress
+- 2026-09-25: Kubernetes secrets engine (issue #6) on `feat/kubernetes-secrets-engine`: screen, kubeconfig copy/save, k3s dev stack, BDD + integration tests
 - 2026-09-18: Multi-database: mount discovery, roles grouped by mount, engine/address detection with manual fallback, `cqlsh`; tagged `v0.1.0-rc3`. Side-by-side credentials were built and dropped on request: picking another role clears the card
 - 2026-09-18: CLI environment import (`core/utils/cli_environment.dart`, `cliEnvironmentProvider`); token is read only on click and lands in the masked field, never in settings
 - 2026-09-18: Server profiles (`ServerProfile`, dropdown, colour tag, Settings list); sharing screen gated on session
@@ -56,6 +57,7 @@ Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from th
 - **OIDC**: loopback listener on `127.0.0.1:8250`, state + nonce checked (`features/auth/data/oidc_login_flow.dart`)
 - **Database mounts**: `databaseMountsProvider` takes `type == database` mounts from `sys/internal/ui/mounts` (no policy needed); the `databaseMount` setting (comma list) is only the fallback. Client methods take the mount as an argument; `VaultMounts` has no database field
 - **Database detection**: `describeDatabaseRole` reads `roles/<role>` then `config/<db_name>`; 403 means manual engine choice. Only host, port and name are parsed from `connection_url`, which is never kept or logged. Targets are saved in `databaseTargets` keyed `mount` (manual) or `mount/connection` (detected); saved host wins over detected (Docker names), detected engine wins over saved. Legacy `databaseClient/Host/Port/Name` are the defaults
+- **Kubernetes**: `features/kubernetes` mirrors database (mounts from `sys/internal/ui/mounts`, `kubernetesMount` fallback, one card, generation counter). The engine binds a token to one namespace, so several namespaces = one request each (`KubernetesTokenSet`: tokens + failures, max 10, `Future.wait`); all refused = AsyncError. One kubeconfig, one cluster, one user + context per namespace (`kubeContextName`), commands use `--context`. Chips (`NamespaceChips`) sit full width below the field row, which is top-aligned. API server + CA path saved in `kubernetesTargets` keyed by mount; the CA file is read (`kubeCaReaderProvider`, absolute path) and embedded as `certificate-authority-data`. Namespace field (`namespace_field.dart`): `MenuAnchor` + `TextField`, options rebuilt each build (not `RawAutocomplete`: it only recomputes options on text change, so late-loaded role info never showed). Options: `kubernetesRecentNamespaces` (`mount/role`, max 10, recorded only after a successful request) then allowed names; a filled-in exact name shows all. Token only in clipboard (via `ClipboardGuard`) or a `writePrivateFile` (0600) kubeconfig; `kubectlCommand` uses `KUBECONFIG=`, never argv
 - **Database credentials**: one result at a time, titled `mount/role`; picking another role on any mount clears it (user decision, do not reintroduce side-by-side cards). `detectedDatabaseProvider` is autoDispose and invalidated by Refresh and session cleanup; Connect field edits are debounced (400 ms) before they hit the keystore
 - **bdd_widget_test**: lines above `Feature:` are copied as Dart, so `#` comments there break `make gen`; notes go in the feature description
 - **Connect sections**: host/port/db/user/key path are user settings (Vault does not return them); passwords go through env vars (`PGPASSWORD`, `MYSQL_PWD`, `SSHPASS`), never argv (`cqlsh` prompts instead); all values pass `shellQuote`
@@ -86,6 +88,7 @@ Dev stack (`dev/docker-compose.yml`, all bound to `127.0.0.1`, subnet `172.30.0.
 | LDAP (OpenLDAP) | mount `ldap` | `ldapdemo` / `transikey-dev` |
 | AppRole | mount `approle` | `make dev-approle` |
 | PostgreSQL | `:5432`, db `app` | mount `database`: roles `readonly` (10m), `short-lived` (1m), detection allowed; mount `reporting`: role `analyst`, detection denied |
+| k3s | `:6443` (API), CA via `make dev-k3s-ca` → `dev/k3s-ca.crt` | mount `kubernetes`: roles `developer` (Role, namespaces `transikey-test`, `transikey-sandbox`; OpenBao returns them sorted), `viewer` (ClusterRole, any namespace, cluster binding); tokens min `10m` TTL |
 | sshd | `:2222`, user `ubuntu`, container IP `172.30.0.10` | roles `sign` (CA cert), `otp` (request OTP for `172.30.0.10`) |
 
 Policy `transikey` (in `dev/init.sh`) is the reference for least-privilege access the app needs.

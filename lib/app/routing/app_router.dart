@@ -6,13 +6,14 @@ import '../../features/auth/domain/vault_session.dart';
 import '../../features/auth/presentation/auth_screen.dart';
 import '../../features/auth/presentation/session_provider.dart';
 import '../../features/database/presentation/database_screen.dart';
+import '../../features/kubernetes/presentation/kubernetes_screen.dart';
 import '../../features/leases/presentation/leases_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/sharing/presentation/sharing_screen.dart';
 import '../../features/ssh/presentation/ssh_screen.dart';
 import '../shell/app_shell.dart';
 
-/// One sidebar entry. Order defines the Ctrl/Cmd+1..6 shortcuts.
+/// One sidebar entry. Order defines the Ctrl/Cmd+1..7 shortcuts.
 class AppDestination {
   const AppDestination(this.path, this.label, this.icon, {this.public = false});
 
@@ -28,6 +29,7 @@ const appDestinations = [
   AppDestination('/auth', 'Authentication', Icons.key, public: true),
   AppDestination('/database', 'Database Credentials', Icons.storage),
   AppDestination('/ssh', 'SSH Access', Icons.terminal),
+  AppDestination('/kubernetes', 'Kubernetes Access', Icons.hub_outlined),
   // Public: a share link recipient can unwrap without a session.
   AppDestination('/sharing', 'Secret Sharing', Icons.ios_share, public: true),
   AppDestination('/leases', 'Lease Management', Icons.timer_outlined),
@@ -62,6 +64,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             ('/auth', const AuthScreen()),
             ('/database', const DatabaseScreen()),
             ('/ssh', const SshScreen()),
+            ('/kubernetes', const KubernetesScreen()),
             ('/sharing', const SharingScreen()),
             ('/leases', const LeasesScreen()),
             ('/settings', const SettingsScreen()),

@@ -4,10 +4,13 @@
 #   - database secrets engine connected to the compose PostgreSQL, mounted
 #     twice (database, reporting)
 #   - SSH secrets engine with an OTP role and a CA signing role
+#   - Kubernetes secrets engine against the compose k3s, with a namespaced
+#     role (developer) and a cluster role (viewer)
 #
 # Idempotent: safe to run again against the same server.
 # Required environment: BAO_ADDR, BAO_TOKEN, DEV_POSTGRES_PASSWORD,
-# DEV_USER, DEV_USER_PASSWORD, DEV_LDAP_ADMIN_PASSWORD.
+# DEV_USER, DEV_USER_PASSWORD, DEV_LDAP_ADMIN_PASSWORD, DEV_K8S_NAMESPACE.
+# Reads the k3s service account token and CA from /k3s (see k3s-init.sh).
 
 set -eu
 
@@ -15,7 +18,7 @@ log() { printf '[init] %s\n' "$*"; }
 die() { printf '[init] ERROR: %s\n' "$*" >&2; exit 1; }
 
 for var in BAO_ADDR BAO_TOKEN DEV_POSTGRES_PASSWORD DEV_USER DEV_USER_PASSWORD \
-  DEV_LDAP_ADMIN_PASSWORD; do
+  DEV_LDAP_ADMIN_PASSWORD DEV_K8S_NAMESPACE; do
   eval "[ -n \"\${$var:-}\" ]" || die "$var is not set"
 done
 command -v bao >/dev/null 2>&1 || die "bao CLI not found"
@@ -61,6 +64,14 @@ path "reporting/creds/*" { capabilities = ["read"] }
 path "ssh/roles"         { capabilities = ["list"] }
 path "ssh/creds/*"       { capabilities = ["update"] }
 path "ssh/sign/*"        { capabilities = ["update"] }
+
+# Kubernetes service account tokens
+path "kubernetes/roles"   { capabilities = ["list"] }
+path "kubernetes/creds/*" { capabilities = ["update"] }
+
+# Optional: lets the app pre-fill the namespace from the role's allowed
+# namespaces.
+path "kubernetes/roles/*" { capabilities = ["read"] }
 
 # Lease management
 path "sys/leases/renew"  { capabilities = ["update"] }
@@ -162,6 +173,33 @@ bao write ssh/roles/sign - >/dev/null <<'JSON'
 JSON
 log "ssh roles otp, sign ready"
 
+for f in /k3s/openbao.jwt /k3s/ca.crt; do
+  [ -s "$f" ] || die "$f missing: run the k3s-init service first"
+done
+enable secrets kubernetes
+bao write kubernetes/config \
+  kubernetes_host=https://k3s:6443 \
+  kubernetes_ca_cert=@/k3s/ca.crt \
+  service_account_jwt=@/k3s/openbao.jwt >/dev/null
+# The engine creates a service account, a Role with these rules and a
+# binding for every request, and deletes them when the lease ends.
+rules='{"rules":[{"apiGroups":[""],"resources":["pods","services","configmaps"],"verbs":["get","list","watch"]}]}'
+# Two namespaces: the app offers a choice between them.
+bao write kubernetes/roles/developer \
+  allowed_kubernetes_namespaces="$DEV_K8S_NAMESPACE,transikey-sandbox" \
+  kubernetes_role_type=Role \
+  generated_role_rules="$rules" \
+  token_default_ttl=10m \
+  token_max_ttl=1h >/dev/null
+# A ClusterRole: requests may ask for a cluster-wide binding.
+bao write kubernetes/roles/viewer \
+  allowed_kubernetes_namespaces="*" \
+  kubernetes_role_type=ClusterRole \
+  generated_role_rules="$rules" \
+  token_default_ttl=10m \
+  token_max_ttl=1h >/dev/null
+log "kubernetes roles developer ($DEV_K8S_NAMESPACE, transikey-sandbox), viewer ready"
+
 cat <<SUMMARY
 
 [init] done. Sign in to Transikey with:
@@ -171,5 +209,6 @@ cat <<SUMMARY
   ldap      user from DEV_LDAP_USER (default: ldapdemo), password from DEV_LDAP_USER_PASSWORD
 
 [init] SSH target: ssh -p 2222 ubuntu@127.0.0.1 (container IP 172.30.0.10, use it for OTPs)
+[init] Kubernetes: API https://127.0.0.1:6443, CA from make dev-k3s-ca, namespace $DEV_K8S_NAMESPACE
   approle   make dev-approle
 SUMMARY

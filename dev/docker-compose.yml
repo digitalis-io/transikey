@@ -1,5 +1,6 @@
-# Local test stack for Transikey: OpenBao (dev mode), PostgreSQL, OpenLDAP and
-# an SSH server that trusts OpenBao certificates and one-time passwords.
+# Local test stack for Transikey: OpenBao (dev mode), PostgreSQL, OpenLDAP, an
+# SSH server that trusts OpenBao certificates and one-time passwords, and a
+# single-node k3s cluster for the Kubernetes secrets engine.
 # Development only. Dev mode keeps everything in memory and uses a fixed root
 # token. Never expose this stack beyond localhost.
 #
@@ -72,6 +73,49 @@ services:
     ports:
       - "127.0.0.1:${DEV_SSHD_PORT:-2222}:22"
 
+  # Single-node Kubernetes for the Kubernetes secrets engine. Privileged:
+  # k3s runs containerd and a kubelet inside the container.
+  k3s:
+    image: ${DEV_K3S_IMAGE:-rancher/k3s:v1.31.4-k3s1}
+    command:
+      - server
+      - --disable=traefik,servicelb,metrics-server,local-storage
+      - --tls-san=k3s
+      - --tls-san=127.0.0.1
+    privileged: true
+    tmpfs:
+      - /run
+      - /var/run
+    environment:
+      K3S_KUBECONFIG_OUTPUT: /output/kubeconfig.yaml
+      K3S_KUBECONFIG_MODE: "600"
+    volumes:
+      - k3s-output:/output
+    ports:
+      - "127.0.0.1:${DEV_K3S_PORT:-6443}:6443"
+    healthcheck:
+      test: ["CMD", "kubectl", "get", "--raw", "/readyz"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+
+  # Gives OpenBao a service account on k3s. Runs in the k3s image for kubectl.
+  k3s-init:
+    image: ${DEV_K3S_IMAGE:-rancher/k3s:v1.31.4-k3s1}
+    depends_on:
+      k3s:
+        condition: service_healthy
+    environment:
+      KUBECONFIG: /output/kubeconfig.yaml
+      K3S_SERVER: https://k3s:6443
+      OUT_DIR: /output
+      DEV_K8S_NAMESPACE: ${DEV_K8S_NAMESPACE:-transikey-test}
+    volumes:
+      - k3s-output:/output
+      - ./k3s-init.sh:/k3s-init.sh:ro
+    entrypoint: ["/bin/sh", "/k3s-init.sh"]
+    restart: "no"
+
   openbao:
     image: ${DEV_BAO_IMAGE:-openbao/openbao:latest}
     command: server -dev -dev-listen-address=0.0.0.0:8200
@@ -97,7 +141,10 @@ services:
         condition: service_healthy
       ldap-init:
         condition: service_completed_successfully
+      k3s-init:
+        condition: service_completed_successfully
     environment:
+      DEV_K8S_NAMESPACE: ${DEV_K8S_NAMESPACE:-transikey-test}
       DEV_LDAP_ADMIN_PASSWORD: ${DEV_LDAP_ADMIN_PASSWORD:-transikey-dev}
       BAO_ADDR: http://openbao:8200
       BAO_TOKEN: ${DEV_BAO_ROOT_TOKEN:-root}
@@ -106,5 +153,10 @@ services:
       DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-transikey-dev}
     volumes:
       - ./init.sh:/init.sh:ro
+      - k3s-output:/k3s:ro
     entrypoint: ["/bin/sh", "/init.sh"]
     restart: "no"
+
+volumes:
+  # k3s kubeconfig, plus the OpenBao service account token and cluster CA.
+  k3s-output:
