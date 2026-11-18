@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -40,9 +42,22 @@ class RolePicker extends StatefulWidget {
 class _RolePickerState extends State<RolePicker> {
   final _manual = TextEditingController();
   String? _manualGroup;
+  Timer? _debounce;
+
+  // Typing a role is enough: no need to press Enter before requesting.
+  void _typed(String group) {
+    _debounce?.cancel();
+    final role = _manual.text.trim();
+    if (role.isEmpty) return;
+    _debounce = Timer(
+      const Duration(milliseconds: 400),
+      () => widget.onSelected(group, role),
+    );
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _manual.dispose();
     super.dispose();
   }
@@ -89,9 +104,11 @@ class _RolePickerState extends State<RolePicker> {
           controller: _manual,
           decoration: const InputDecoration(
             labelText: 'Role name',
-            hintText: 'Type a role and press Enter',
+            hintText: 'Type a role name',
           ),
+          onChanged: (_) => _typed(manualGroup),
           onSubmitted: (v) {
+            _debounce?.cancel();
             if (v.trim().isNotEmpty) widget.onSelected(manualGroup, v.trim());
           },
         ),

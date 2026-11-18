@@ -43,6 +43,7 @@ All notable changes to this project will be documented in this file.
 - Action buttons keep their label when no role is selected and show a hint instead
 
 ### Fixed
+- A role typed by hand (token may not list roles) had to be confirmed with Enter before the request button enabled; it is now picked once typing pauses
 - Credentials of the previous role stayed on screen after picking another role (Database and SSH)
 - Debug builds: one out-of-sync key event (a key Flutter still believed pressed) blocked all typing until restart; the stale event is now dropped and the next key press recovers. The window-focus keyboard resync is gone: it could only add pressed keys, never clear them
 - Database and SSH role lists were requested without a token while the session was locked or signed out; the resulting "Permission denied" stayed on screen until a manual refresh. Roles now load only for an active session and reload on sign-in and unlock
