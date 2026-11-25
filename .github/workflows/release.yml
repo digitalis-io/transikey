@@ -42,7 +42,7 @@ jobs:
       matrix:
         include:
           - platform: macos
-            runner: macos-14
+            runner: macos-15
           - platform: windows
             runner: windows-2022
           - platform: linux
