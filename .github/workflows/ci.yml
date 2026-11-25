@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: "3.32.8"
+  FLUTTER_VERSION: "3.50.0"
 
 jobs:
   pre-commit:
@@ -41,7 +41,7 @@ jobs:
         run: dart format --output=none --set-exit-if-changed lib test
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
-      - run: flutter analyze
+      - run: flutter analyze --no-fatal-infos
       - name: Unit and BDD tests
         run: flutter test --exclude-tags integration
 

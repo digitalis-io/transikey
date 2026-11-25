@@ -88,7 +88,7 @@ No package manager integration yet. Download from the
 
 ## Quick start (from source)
 
-You need [Flutter](https://docs.flutter.dev/get-started/install) 3.32 or newer and Docker.
+You need [Flutter](https://docs.flutter.dev/get-started/install) 3.50 or newer and Docker.
 
 ```bash
 git clone git@github.com:digitalis-io/transikey.git && cd transikey

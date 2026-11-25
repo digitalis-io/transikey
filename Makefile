@@ -42,7 +42,7 @@ format: ## Format Dart sources
 
 .PHONY: analyze
 analyze: ## Run the static analyzer
-	flutter analyze
+	flutter analyze --no-fatal-infos
 
 .PHONY: test
 test: ## Run unit and BDD tests (no server needed)

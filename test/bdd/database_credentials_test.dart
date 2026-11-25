@@ -21,9 +21,8 @@ void main() {
       await aServerThatOffersDatabaseRoles(tester);
     }
 
-    testWidgets('''Requesting credentials shows them for the chosen role''', (
-      tester,
-    ) async {
+    testWidgets('''Requesting credentials shows them for the chosen role''',
+        (tester) async {
       await bddSetUp(tester);
       await theDatabaseCredentialsScreenIsOpen(tester);
       await iPickTheRole(tester, 'readonly');
@@ -31,9 +30,8 @@ void main() {
       await iSeeTheText(tester, 'Password');
       await iSeeTheText(tester, 'database/readonly');
     });
-    testWidgets('''Picking another role clears the previous credentials''', (
-      tester,
-    ) async {
+    testWidgets('''Picking another role clears the previous credentials''',
+        (tester) async {
       await bddSetUp(tester);
       await theDatabaseCredentialsScreenIsOpen(tester);
       await iPickTheRole(tester, 'readonly');
@@ -43,20 +41,18 @@ void main() {
       await iSeeTheText(tester, 'Request credentials for short-lived');
     });
     testWidgets(
-      '''Picking a role on another mount clears the previous credentials''',
-      (tester) async {
-        await bddSetUp(tester);
-        await theDatabaseMountOffersTheRole(tester, 'cass001', 'operator');
-        await theDatabaseCredentialsScreenIsOpen(tester);
-        await iPickTheRole(tester, 'readonly');
-        await iRequestDatabaseCredentials(tester);
-        await iPickTheRole(tester, 'operator');
-        await iDoNotSeeTheText(tester, 'Password');
-      },
-    );
-    testWidgets('''Picking the same role again keeps the credentials''', (
-      tester,
-    ) async {
+        '''Picking a role on another mount clears the previous credentials''',
+        (tester) async {
+      await bddSetUp(tester);
+      await theDatabaseMountOffersTheRole(tester, 'cass001', 'operator');
+      await theDatabaseCredentialsScreenIsOpen(tester);
+      await iPickTheRole(tester, 'readonly');
+      await iRequestDatabaseCredentials(tester);
+      await iPickTheRole(tester, 'operator');
+      await iDoNotSeeTheText(tester, 'Password');
+    });
+    testWidgets('''Picking the same role again keeps the credentials''',
+        (tester) async {
       await bddSetUp(tester);
       await theDatabaseCredentialsScreenIsOpen(tester);
       await iPickTheRole(tester, 'readonly');
@@ -64,9 +60,8 @@ void main() {
       await iPickTheRole(tester, 'readonly');
       await iSeeTheText(tester, 'Password');
     });
-    testWidgets('''Clearing credentials removes them from the screen''', (
-      tester,
-    ) async {
+    testWidgets('''Clearing credentials removes them from the screen''',
+        (tester) async {
       await bddSetUp(tester);
       await theDatabaseCredentialsScreenIsOpen(tester);
       await iPickTheRole(tester, 'readonly');
@@ -83,18 +78,16 @@ void main() {
       await iSeeTheText(tester, 'Request credentials for cass001/operator');
     });
     testWidgets(
-      '''A mount that refuses to list its roles does not hide the others''',
-      (tester) async {
-        await bddSetUp(tester);
-        await theDatabaseMountRefusesToListItsRoles(tester, 'locked');
-        await theDatabaseCredentialsScreenIsOpen(tester);
-        await iSeeTheText(tester, 'Permission denied.');
-        await iSeeTheText(tester, 'readonly');
-      },
-    );
-    testWidgets('''The engine is asked for when the server hides it''', (
-      tester,
-    ) async {
+        '''A mount that refuses to list its roles does not hide the others''',
+        (tester) async {
+      await bddSetUp(tester);
+      await theDatabaseMountRefusesToListItsRoles(tester, 'locked');
+      await theDatabaseCredentialsScreenIsOpen(tester);
+      await iSeeTheText(tester, 'Permission denied.');
+      await iSeeTheText(tester, 'readonly');
+    });
+    testWidgets('''The engine is asked for when the server hides it''',
+        (tester) async {
       await bddSetUp(tester);
       await theDatabaseCredentialsScreenIsOpen(tester);
       await iPickTheRole(tester, 'readonly');
@@ -102,9 +95,8 @@ void main() {
       await iSeeTheText(tester, 'MySQL / MariaDB');
       await iSeeTheText(tester, 'psql command');
     });
-    testWidgets('''The engine is not asked for when the server reveals it''', (
-      tester,
-    ) async {
+    testWidgets('''The engine is not asked for when the server reveals it''',
+        (tester) async {
       await bddSetUp(tester);
       await theServerRevealsACassandraClusterBehindTheRole(tester, 'readonly');
       await theDatabaseCredentialsScreenIsOpen(tester);
