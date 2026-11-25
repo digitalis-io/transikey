@@ -59,17 +59,13 @@ void main() {
       await iSeeTheMessage(tester, 'Sign in');
       await iDoNotSeeTheMessage(tester, 'Signed in');
     });
-    testWidgets('''Picking a remembered server fills in the sign in form''', (
-      tester,
-    ) async {
+    testWidgets('''Picking a remembered server fills in the sign in form''',
+        (tester) async {
       await bddSetUp(tester);
       await theServersAndAreRemembered(tester, 'prod', 'dev');
       await iPickTheServer(tester, 'prod');
       await theSignInFormTargetsAs(
-        tester,
-        'https://bao.prod.example:8200',
-        'sergio',
-      );
+          tester, 'https://bao.prod.example:8200', 'sergio');
     });
     testWidgets('''A new server starts from an empty form''', (tester) async {
       await bddSetUp(tester);
@@ -79,17 +75,12 @@ void main() {
       await theSignInFormTargetsAs(tester, '', '');
     });
     testWidgets(
-      '''Importing the CLI environment fills in the form without signing in''',
-      (tester) async {
-        await bddSetUp(tester);
-        await iImportTheCliEnvironment(tester);
-        await theSignInFormTargetsAs(
-          tester,
-          'https://bao.cli.example:8200',
-          '',
-        );
-        await iDoNotSeeTheMessage(tester, 'Signed in');
-      },
-    );
+        '''Importing the CLI environment fills in the form without signing in''',
+        (tester) async {
+      await bddSetUp(tester);
+      await iImportTheCliEnvironment(tester);
+      await theSignInFormTargetsAs(tester, 'https://bao.cli.example:8200', '');
+      await iDoNotSeeTheMessage(tester, 'Signed in');
+    });
   });
 }

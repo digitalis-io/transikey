@@ -43,7 +43,7 @@ Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from th
 - `ssh/get-attempt-token` does not exist in OpenBao (`404 unsupported path`); client keeps the call per spec.
 
 ## Architecture & Key Decisions
-- **Stack**: Flutter 3.32+ / Dart 3.8 desktop app (macOS, Windows, Linux). Riverpod 3 (Notifier/AsyncNotifier), go_router, Dio, Freezed. Layout: `lib/app`, `lib/core`, `lib/features/<name>/{domain,data,presentation}`
+- **Stack**: Flutter 3.50+ / Dart 3.14 desktop app (macOS, Windows, Linux). Riverpod 3 (Notifier/AsyncNotifier), go_router, Dio, Freezed. Layout: `lib/app`, `lib/core`, `lib/features/<name>/{domain,data,presentation}`
 - **Generated code** (`*.g.dart`, `*.freezed.dart`) is git-ignored: run `make gen` after clone and after model or `.feature` changes
 - **Secrets in models**: every model holding secret material overrides `toString()` with a redacted form; logging goes through `AppLogger` + `Redaction` only
 - **Token location**: `TokenHolder` (memory) and OS keystore; never in provider state or models that reach the UI
@@ -69,7 +69,7 @@ Shared engineering standards live in `~/.claude/DIGITALIS.md` (installed from th
 
 | Item | Value |
 |------|-------|
-| Flutter / Dart | 3.32.8 / 3.8.1 (pinned in CI as `FLUTTER_VERSION`) |
+| Flutter / Dart | 3.50.0 / 3.14.0 (pinned in CI as `FLUTTER_VERSION`); `flutter analyze --no-fatal-infos` until `package:material_ui` migration |
 | App id | `io.digitalis.transikey`, macOS deployment target 13.0 |
 | Branch / PR | `feat/flutter-scaffold` → `main`, PR #1 |
 | Commit identity | `Sergio Rua <sergio.rua@digitalis.io>`, GPG signed + `-s`; no AI trailers in commits, `Assisted-by: Claude Code` in the PR body |

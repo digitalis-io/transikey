@@ -38,6 +38,7 @@ All notable changes to this project will be documented in this file.
 - Initial project scaffold bootstrapped from automation/bootstrap
 
 ### Changed
+- Flutter 3.50.0 in CI and release builds; macOS plugins now come from Swift Package Manager instead of CocoaPods, and the code generators (build_runner, freezed, json_serializable, bdd_widget_test) are upgraded so they run on Dart 3.14. The analyzer no longer fails on info-level deprecations until the move to `package:material_ui`
 - Sign-out revokes only tokens the app created at login; a token you pasted in stays valid
 - Redirects are never followed and clients for another server never carry the session token
 - Action buttons keep their label when no role is selected and show a hint instead

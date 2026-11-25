@@ -17,9 +17,8 @@ import './step/wrapping_is_disabled_with_a_sign_in_hint.dart';
 
 void main() {
   group('''Secret sharing links''', () {
-    testWidgets('''Wrapping a secret offers a share link and a CLI command''', (
-      tester,
-    ) async {
+    testWidgets('''Wrapping a secret offers a share link and a CLI command''',
+        (tester) async {
       await theSecretSharingScreenIsOpen(tester);
       await iWrapTheSecret(tester, 'database password is hunter2');
       await iSeeTheButton(tester, 'Copy share link');
@@ -32,49 +31,36 @@ void main() {
       await iDoNotSeeTheButton(tester, 'Copy share link');
     });
     testWidgets(
-      '''Opening a share link prefills the unwrap form without sending anything''',
-      (tester) async {
-        await theSecretSharingScreenIsOpen(tester);
-        await iOpenTheLink(
-          tester,
-          'transikey://unwrap?addr=https%3A%2F%2Fbao.partner.example%3A8200&token=wrapping-token-1',
-        );
-        await theUnwrapFormTargetsTheServer(
-          tester,
-          'https://bao.partner.example:8200',
-        );
-        await noSecretHasBeenRequested(tester);
-      },
-    );
+        '''Opening a share link prefills the unwrap form without sending anything''',
+        (tester) async {
+      await theSecretSharingScreenIsOpen(tester);
+      await iOpenTheLink(tester,
+          'transikey://unwrap?addr=https%3A%2F%2Fbao.partner.example%3A8200&token=wrapping-token-1');
+      await theUnwrapFormTargetsTheServer(
+          tester, 'https://bao.partner.example:8200');
+      await noSecretHasBeenRequested(tester);
+    });
     testWidgets('''A malformed link is ignored''', (tester) async {
       await theSecretSharingScreenIsOpen(tester);
-      await iOpenTheLink(
-        tester,
-        'transikey://unwrap?addr=file%3A%2F%2F%2Fetc%2Fpasswd&token=x',
-      );
+      await iOpenTheLink(tester,
+          'transikey://unwrap?addr=file%3A%2F%2F%2Fetc%2Fpasswd&token=x');
       await iSeeTheButton(tester, 'Wrap secret');
       await noSecretHasBeenRequested(tester);
     });
-    testWidgets('''Signed out, wrapping is unavailable and says why''', (
-      tester,
-    ) async {
+    testWidgets('''Signed out, wrapping is unavailable and says why''',
+        (tester) async {
       await theSecretSharingScreenIsOpenWithoutASession(tester);
       await iSeeTheText(tester, 'Wrapping token');
       await wrappingIsDisabledWithASignInHint(tester);
     });
     testWidgets(
-      '''Signed out, a share link can still be prepared for unwrapping''',
-      (tester) async {
-        await theSecretSharingScreenIsOpenWithoutASession(tester);
-        await iOpenTheLink(
-          tester,
-          'transikey://unwrap?addr=https%3A%2F%2Fbao.partner.example%3A8200&token=wrapping-token-1',
-        );
-        await theUnwrapFormTargetsTheServer(
-          tester,
-          'https://bao.partner.example:8200',
-        );
-      },
-    );
+        '''Signed out, a share link can still be prepared for unwrapping''',
+        (tester) async {
+      await theSecretSharingScreenIsOpenWithoutASession(tester);
+      await iOpenTheLink(tester,
+          'transikey://unwrap?addr=https%3A%2F%2Fbao.partner.example%3A8200&token=wrapping-token-1');
+      await theUnwrapFormTargetsTheServer(
+          tester, 'https://bao.partner.example:8200');
+    });
   });
 }
